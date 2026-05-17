@@ -34,6 +34,7 @@ class LockedFocusRow<T> extends StatefulWidget {
   final EdgeInsets padding;
   final double height;
   final bool autofocus;
+  final Clip clipBehavior;
 
   const LockedFocusRow({
     super.key,
@@ -56,6 +57,7 @@ class LockedFocusRow<T> extends StatefulWidget {
     this.onRightEdge,
     this.padding = EdgeInsets.zero,
     this.autofocus = false,
+    this.clipBehavior = Clip.hardEdge,
   });
 
   @override
@@ -239,6 +241,7 @@ class LockedFocusRowState<T> extends State<LockedFocusRow<T>> {
         child: ListView.separated(
           controller: _scrollController,
           scrollDirection: Axis.horizontal,
+          clipBehavior: widget.clipBehavior,
           padding: widget.padding,
           itemCount: widget.items.length,
           separatorBuilder: (_, _) => SizedBox(width: widget.itemSpacing),

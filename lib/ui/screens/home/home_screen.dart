@@ -645,6 +645,14 @@ class _ContentRowsState extends State<_ContentRows>
       });
     }
 
+    if (wasOnSidebar && !onSidebar && _activeFocusedRowIndex != null) {
+      final rowIndex = _activeFocusedRowIndex!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _requestRowFocusFromMemory(rowIndex);
+      });
+    }
+
     _lastGlobalPrimaryFocus = primary;
 
     if (chromeFocusActive && (chromeChanged || _activePreviewKey != null)) {
@@ -1997,10 +2005,12 @@ class _ContentRowsState extends State<_ContentRows>
   }
 
   double _v2MetadataHeightBudget(UserPreferences prefs) {
-    final v2NeedsExtraRatingsHeadroom =
-        PlatformDetection.isTV &&
+    final hasAdditionalRatings =
         prefs.get(UserPreferences.enableAdditionalRatings);
-    return v2NeedsExtraRatingsHeadroom ? 172.0 : 136.0;
+    if (hasAdditionalRatings) {
+      return PlatformDetection.isTV ? 208.0 : 144.0;
+    }
+    return 136.0;
   }
 
   double _overlayRowShift({
@@ -2509,6 +2519,18 @@ class _ContentRowsState extends State<_ContentRows>
     const v2FocusedAspect = 16 / 9;
     final v2PortraitWidth = v2ImageHeight * v2PortraitAspect;
     final v2FocusedWidth = v2ImageHeight * v2FocusedAspect;
+    final navbarIsTopV2 =
+        widget.prefs.get(UserPreferences.navbarPosition) == NavbarPosition.top;
+    final rowLeftInsetV2 =
+        (!navbarIsTopV2 && !PlatformDetection.useMobileUi) ? 56.0 : 0.0;
+    final v2ExtendedWidth = isRowsV2
+        ? (MediaQuery.of(context).size.width -
+                rowLeftInsetV2 -
+                16.0 -
+                MediaQuery.paddingOf(context).right -
+                16.0)
+            .clamp(v2PortraitWidth, double.infinity)
+        : 0.0;
 
     double maxCardHeight = 0;
     double firstCardWidth = 0;
@@ -2549,6 +2571,7 @@ class _ContentRowsState extends State<_ContentRows>
         itemExtent: firstCardWidth,
         itemSpacing: 12,
         leadingPadding: isRowsV2 ? 16 : 0,
+        clipBehavior: isRowsV2 ? Clip.none : Clip.hardEdge,
         padding: const EdgeInsets.fromLTRB(16, 5, 20, 5),
         onFocusChange: (has) => _onRowFocusTracked(rowIndex, has),
         onVerticalNavigation: (isUp) => _onRowVerticalNavigation(
@@ -2597,7 +2620,6 @@ class _ContentRowsState extends State<_ContentRows>
           late final double ar;
           late final double width;
           late final String? imageUrl;
-          Widget? subtitleWidget;
           final previewKey = _previewKeyFor(item);
           final isV2MobileTouch = isRowsV2 && PlatformDetection.useMobileUi;
           final isV2MouseHover =
@@ -2612,20 +2634,24 @@ class _ContentRowsState extends State<_ContentRows>
           if (isRowsV2) {
             ar = effectiveV2Focused ? v2FocusedAspect : v2PortraitAspect;
             width = effectiveV2Focused ? v2FocusedWidth : v2PortraitWidth;
+            final posterUrl = _resolveRowImageUrl(
+              item,
+              imageApi,
+              v2ImageHeight,
+              ImageType.poster,
+              useSeriesThumbs,
+              requestScale,
+              isMyMediaRow: row.rowType == HomeRowType.libraryTiles,
+            );
             imageUrl = effectiveV2Focused
-                ? _resolveV2FocusedImageUrl(item, imageApi, v2ImageHeight, requestScale)
-                : _resolveRowImageUrl(
-                    item,
-                    imageApi,
-                    v2ImageHeight,
-                    ImageType.poster,
-                    useSeriesThumbs,
-                    requestScale,
-                    isMyMediaRow: row.rowType == HomeRowType.libraryTiles,
-                  );
-            subtitleWidget = effectiveV2Focused
-                ? _buildV2SubtitleWidget(ctx, item, previewKey)
-                : null;
+              ? (_resolveV2FocusedImageUrl(
+                  item,
+                  imageApi,
+                  v2ImageHeight,
+                  requestScale,
+                ) ??
+                posterUrl)
+              : posterUrl;
           } else {
             final itemAr = _aspectRatioForRowItem(item, row, rowImageType);
             final itemHeight = (itemAr > 1
@@ -2645,15 +2671,26 @@ class _ContentRowsState extends State<_ContentRows>
             );
           }
 
-            final canPreview = _supportsEpisodePreview(item);
+          final canPreview = _supportsEpisodePreview(item);
 
           final showPreviewVideo =
               _activePreviewKey == previewKey && _previewReady;
 
+          void navigateToItem() {
+            if (row.rowType == HomeRowType.libraryTiles) {
+              _navigateToLibrary(context, item);
+            } else {
+              context.push(Destinations.itemOrPhoto(
+                item.id,
+                serverId: item.serverId,
+                type: item.type,
+              ));
+            }
+          }
+
           final card = MediaCard(
             title: item.name,
-            subtitle: isRowsV2 && effectiveV2Focused ? null : item.subtitle,
-            subtitleWidget: subtitleWidget,
+            subtitle: isRowsV2 && effectiveV2Focused ? _v2MetadataLine(item) : item.subtitle,
             imageUrl: imageUrl,
             width: width,
             aspectRatio: ar,
@@ -2717,6 +2754,22 @@ class _ContentRowsState extends State<_ContentRows>
               onChanged: () => setState(() {}),
             ),
             onTap: () {
+              if (isV2MobileTouch) {
+                if (_mobilePressedV2Key == previewKey) {
+                  setState(() => _mobilePressedV2Key = null);
+                  _finishSharedPreview(releaseResources: true);
+                  navigateToItem();
+                } else {
+                  setState(() {
+                    _mobilePressedV2Key = previewKey;
+                    _mouseHoveredV2Key = null;
+                  });
+                  widget.onItemSelected(item);
+                  _primeV2FocusedRatings(item);
+                }
+                return;
+              }
+
               if (isRowsV2 &&
                   (_mobilePressedV2Key != null || _mouseHoveredV2Key != null)) {
                 setState(() {
@@ -2725,15 +2778,7 @@ class _ContentRowsState extends State<_ContentRows>
                 });
               }
               _finishSharedPreview(releaseResources: true);
-              if (row.rowType == HomeRowType.libraryTiles) {
-                _navigateToLibrary(context, item);
-              } else {
-                context.push(Destinations.itemOrPhoto(
-                  item.id,
-                  serverId: item.serverId,
-                  type: item.type,
-                ));
-              }
+              navigateToItem();
             },
           );
 
@@ -2751,12 +2796,28 @@ class _ContentRowsState extends State<_ContentRows>
                 );
 
           if (isRowsV2) {
+            final extendedSection = effectiveV2Focused
+                ? _buildV2ExtendedSection(
+                    ctx,
+                    item,
+                    previewKey,
+                    cardWidth: width,
+                    extendedWidth: v2ExtendedWidth,
+                  )
+                : null;
             return AnimatedSize(
               duration: const Duration(milliseconds: 150),
               curve: Curves.easeInOutCubic,
               alignment: Alignment.topLeft,
-              clipBehavior: Clip.hardEdge,
-              child: previewWrappedCard,
+              clipBehavior: Clip.none,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  previewWrappedCard,
+                  if (extendedSection != null) ...[const SizedBox(height: 4), extendedSection],
+                ],
+              ),
             );
           }
 
@@ -2766,66 +2827,69 @@ class _ContentRowsState extends State<_ContentRows>
     );
   }
 
-  Widget? _buildV2SubtitleWidget(
+  Widget _buildV2ExtendedSection(
     BuildContext context,
     AggregatedItem item,
     String itemKey,
+    {
+    required double cardWidth,
+    required double extendedWidth,
+  }
   ) {
     final additionalRatings = _v2AdditionalRatingsByKey[itemKey] ?? {};
     final hasAnyRating = item.communityRating != null ||
         item.criticRating != null ||
         additionalRatings.isNotEmpty;
-    final metadata = _v2MetadataLine(item);
     final overview = item.overview ?? '';
-    if (!hasAnyRating && metadata.isEmpty && overview.isEmpty) {
-      return null;
+    if (!hasAnyRating && overview.isEmpty) {
+      return SizedBox(width: cardWidth);
     }
 
-    final colorScheme = Theme.of(context).colorScheme;
     final baseStyle =
         Theme.of(context).textTheme.bodySmall ?? const TextStyle(fontSize: 12);
-    final metadataStyle = baseStyle.copyWith(
-      color: colorScheme.onSurface.withAlpha(165),
-      height: 1.2,
-    );
     final overviewStyle = baseStyle.copyWith(
-      color: colorScheme.onSurface.withAlpha(140),
+      color: Theme.of(context).colorScheme.onSurface.withAlpha(140),
       height: 1.4,
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (hasAnyRating)
-          RatingsRow(
-            ratings: additionalRatings,
-            communityRating: item.communityRating,
-            criticRating: item.criticRating,
-            enableAdditionalRatings:
-                widget.prefs.get(UserPreferences.enableAdditionalRatings),
-            enabledRatings: widget.prefs.get(UserPreferences.enabledRatings),
-            showLabels: widget.prefs.get(UserPreferences.showRatingLabels),
-            showBadges: widget.prefs.get(UserPreferences.showRatingBadges),
-          ),
-        if (metadata.isNotEmpty)
-          Text(
-            metadata,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: metadataStyle,
-          ),
-        if (overview.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              overview,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: overviewStyle,
+    return SizedBox(
+      width: cardWidth,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topLeft,
+        children: [
+          SizedBox(
+            width: extendedWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasAnyRating)
+                  RatingsRow(
+                    ratings: additionalRatings,
+                    communityRating: item.communityRating,
+                    criticRating: item.criticRating,
+                    enableAdditionalRatings:
+                        widget.prefs.get(UserPreferences.enableAdditionalRatings),
+                    enabledRatings: widget.prefs.get(UserPreferences.enabledRatings),
+                    showLabels: widget.prefs.get(UserPreferences.showRatingLabels),
+                    showBadges: widget.prefs.get(UserPreferences.showRatingBadges),
+                  ),
+                if (overview.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      overview,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: overviewStyle,
+                    ),
+                  ),
+              ],
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -3003,20 +3067,19 @@ class _ContentRowsState extends State<_ContentRows>
     double requestScale,
   ) {
     final maxW = (height * 16 / 9 * requestScale).toInt();
-    final itemThumbTag = item.thumbImageTag;
+    final maxH = (height * requestScale).toInt();
+    final itemThumbTag = _tagForType(item, 'Thumb');
     if (itemThumbTag != null) {
-      return imageApi.getThumbImageUrl(
-        item.id,
-        maxWidth: maxW,
-        tag: itemThumbTag,
-      );
+      return imageApi.getThumbImageUrl(item.id, maxWidth: maxW, tag: itemThumbTag);
     }
 
-    if (item.parentThumbItemId != null && item.parentThumbImageTag != null) {
+    final parentThumbItemId = item.rawData['ParentThumbItemId'] as String?;
+    final parentThumbTag = item.rawData['ParentThumbImageTag'] as String?;
+    if (parentThumbItemId != null && parentThumbTag != null) {
       return imageApi.getThumbImageUrl(
-        item.parentThumbItemId!,
+        parentThumbItemId,
         maxWidth: maxW,
-        tag: item.parentThumbImageTag!,
+        tag: parentThumbTag,
       );
     }
 
@@ -3028,17 +3091,22 @@ class _ContentRowsState extends State<_ContentRows>
       );
     }
 
-    final parentId = item.parentBackdropItemId;
-    final parentTags = item.parentBackdropImageTags;
-    if (parentId != null && parentTags.isNotEmpty) {
+    final parentBackdropItemId = item.parentBackdropItemId;
+    final parentBackdropTags = item.parentBackdropImageTags;
+    if (parentBackdropItemId != null && parentBackdropTags.isNotEmpty) {
       return imageApi.getBackdropImageUrl(
-        parentId,
+        parentBackdropItemId,
         maxWidth: maxW,
-        tag: parentTags.first,
+        tag: parentBackdropTags.first,
       );
     }
 
-    return _resolvePrimaryImageUrl(item, imageApi, maxWidth: maxW);
+    return _resolvePrimaryImageUrl(
+      item,
+      imageApi,
+      maxHeight: maxH,
+      maxWidth: maxW,
+    );
   }
 
   static ImageType _homeRowImageTypeForRow(HomeRow row, UserPreferences prefs) {

@@ -50,7 +50,7 @@ class UserPreferences extends ChangeNotifier {
 
   static final homeRowsStyle = EnumPreference(
     key: 'pref_home_rows_style',
-    defaultValue: HomeRowsStyle.v1,
+    defaultValue: HomeRowsStyle.v2,
     values: HomeRowsStyle.values,
   );
 
