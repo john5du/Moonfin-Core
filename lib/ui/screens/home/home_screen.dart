@@ -650,7 +650,7 @@ class _ContentRowsState extends State<_ContentRows>
     if (wasOnSidebar && !onSidebar && _activeFocusedRowIndex != null) {
       final rowIndex = _activeFocusedRowIndex!;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+        if (!_mayRestoreHomeFocus()) return;
         _requestRowFocusFromMemory(rowIndex);
       });
     }
@@ -666,6 +666,7 @@ class _ContentRowsState extends State<_ContentRows>
     final isOpen = SettingsPanel.isOpenNotifier.value;
     _onGlobalFocusChanged();
     if (isOpen) return;
+    if (!_isHomeRouteActive()) return;
     if (_activeFocusedRowIndex != null) return;
     if (!_initialFocusResolved) return;
     _initialFocusResolved = false;
@@ -797,9 +798,9 @@ class _ContentRowsState extends State<_ContentRows>
   }
 
   void _repairFocusAfterWindowReturn() {
-    if (!mounted || !_isHomeRouteActive()) return;
+    if (!_mayRestoreHomeFocus()) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_isHomeRouteActive()) return;
+      if (!_mayRestoreHomeFocus()) return;
       if (FocusManager.instance.primaryFocus != null) return;
 
       final rowIndex = _activeFocusedRowIndex;
@@ -1296,6 +1297,10 @@ class _ContentRowsState extends State<_ContentRows>
     return route?.isCurrent ?? true;
   }
 
+  bool _mayRestoreHomeFocus() {
+    return _isHomeRouteActive() && !SettingsPanel.isOpenNotifier.value;
+  }
+
   bool _isHomeRowsStyleV2() {
     return widget.prefs.get(UserPreferences.homeRowsStyle) == HomeRowsStyle.v2;
   }
@@ -1637,6 +1642,7 @@ class _ContentRowsState extends State<_ContentRows>
   }
 
   bool _requestRowFocusFromMemory(int rowIndex, {int? preferredIndex}) {
+    if (!_mayRestoreHomeFocus()) return false;
     final state = _rowStateOf(rowIndex);
     if (state == null) return false;
     if (preferredIndex != null) {
@@ -1668,7 +1674,7 @@ class _ContentRowsState extends State<_ContentRows>
     if (_initialFocusResolved) {
       return;
     }
-    if (!_isHomeRouteActive()) return;
+    if (!_mayRestoreHomeFocus()) return;
 
     final mediaBarEnabled = _isMediaBarEnabledByMode();
     final mediaBarState = widget.mediaBarViewModel.state;
@@ -1707,7 +1713,7 @@ class _ContentRowsState extends State<_ContentRows>
       if (!mounted || _initialFocusResolved) {
         return;
       }
-      if (!_isHomeRouteActive()) return;
+      if (!_mayRestoreHomeFocus()) return;
 
       if (focusMediaBar) {
         if (_scrollController.hasClients && _scrollController.offset > 0) {
@@ -1732,7 +1738,9 @@ class _ContentRowsState extends State<_ContentRows>
       if (!didRequestFocus) {
         if (attempt < 8) {
           Future<void>.delayed(const Duration(milliseconds: 50), () {
-            if (!mounted || _initialFocusResolved) return;
+            if (!mounted || _initialFocusResolved || !_mayRestoreHomeFocus()) {
+              return;
+            }
             _ensureInitialHomeFocus(rows, attempt: attempt + 1);
           });
         }

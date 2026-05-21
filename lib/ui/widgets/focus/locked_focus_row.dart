@@ -123,6 +123,7 @@ class LockedFocusRowState<T> extends State<LockedFocusRow<T>> {
 
   void requestFocusAt(int index) {
     if (widget.items.isEmpty) return;
+    if (!_focusNode.canRequestFocus) return;
     final clamped = index.clamp(0, widget.items.length - 1);
     _setFocusedIndex(clamped);
     _focusNode.requestFocus();
