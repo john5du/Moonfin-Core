@@ -92,8 +92,8 @@ class PlaybackManager {
   StreamResolutionResult? get currentResolution => _currentResolution;
   int? get audioStreamIndex => _audioStreamIndex;
   int? get subtitleStreamIndex => _subtitleStreamIndex;
-  int? get pendingAudioStreamIndex => _audioStreamIndex;
-  int? get pendingSubtitleStreamIndex => _subtitleStreamIndex;
+    int? get pendingAudioStreamIndex => _pendingItemAudioStreamIndex;
+    int? get pendingSubtitleStreamIndex => _pendingItemSubtitleStreamIndex;
   String? get pendingMediaSourceId => _mediaSourceId;
   bool get playbackDeferredToExternalPlayer => _deferPlaybackToExternalPlayer;
   bool consumeSkipExternalRoutingOnce() {
