@@ -747,7 +747,10 @@ class _MediaBarState extends State<MediaBar>
         if (!mounted || resolveId != _trailerResolveId) return;
 
         await _media3TrailerBackend.resume();
-        if (!mounted || resolveId != _trailerResolveId) return;
+        if (!mounted || resolveId != _trailerResolveId) {
+          unawaited(_media3TrailerBackend.stop());
+          return;
+        }
       } catch (_) {
         _markTrailerFailed(item.itemId);
         _cancelTrailerPreview();
@@ -757,7 +760,10 @@ class _MediaBarState extends State<MediaBar>
       _isTrailerPlaying = true;
       _autoAdvanceTimer?.cancel();
       await _waitForMedia3TrailerReady(resolveId);
-      if (!mounted || resolveId != _trailerResolveId) return;
+      if (!mounted || resolveId != _trailerResolveId) {
+        unawaited(_media3TrailerBackend.stop());
+        return;
+      }
 
       if (_trailerVideoOpacity != 1) {
         setState(() => _trailerVideoOpacity = 1);
@@ -774,7 +780,10 @@ class _MediaBarState extends State<MediaBar>
       if (!mounted || resolveId != _trailerResolveId) return;
 
       await player.play();
-      if (!mounted || resolveId != _trailerResolveId) return;
+      if (!mounted || resolveId != _trailerResolveId) {
+        unawaited(player.stop());
+        return;
+      }
     } catch (_) {
       _markTrailerFailed(item.itemId);
       _cancelTrailerPreview();
@@ -784,7 +793,10 @@ class _MediaBarState extends State<MediaBar>
     _isTrailerPlaying = true;
     _autoAdvanceTimer?.cancel();
     await _waitForMediaKitTrailerReady(player, resolveId);
-    if (!mounted || resolveId != _trailerResolveId) return;
+    if (!mounted || resolveId != _trailerResolveId) {
+      unawaited(player.stop());
+      return;
+    }
 
     if (_trailerVideoOpacity != 1) {
       setState(() => _trailerVideoOpacity = 1);

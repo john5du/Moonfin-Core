@@ -916,28 +916,32 @@ class _ContentRowsState extends State<_ContentRows>
   }
 
   void _schedulePreview(AggregatedItem item, {required Duration delay}) {
-    final mainPlaybackActive =
-        _mainPlaybackActive || _playbackManager.state.isPlaying;
-    if (!widget.prefs.get(UserPreferences.episodePreviewEnabled) ||
-        !_supportsEpisodePreview(item) ||
-        _chromeFocusActive ||
-        mainPlaybackActive) {
+    final previewKey = _previewKeyFor(item);
+    if (_activePreviewKey == previewKey) {
       return;
     }
 
-    final previewKey = _previewKeyFor(item);
-    if (_activePreviewKey == previewKey) return;
-
+    _previewDelayTimer?.cancel();
+    _previewDelayTimer = null;
     if (_activePreviewKey != null) {
       _finishSharedPreview();
     }
 
-    _previewDelayTimer?.cancel();
-    _previewDelayTimer = Timer(delay, () async {
+    if (!widget.prefs.get(UserPreferences.episodePreviewEnabled) ||
+        !_supportsEpisodePreview(item) ||
+        _chromeFocusActive ||
+        _mainPlaybackActive) {
+      return;
+    }
+
+    late final Timer thisTimer;
+    thisTimer = Timer(delay, () async {
       if (!mounted || !_isHomeRouteActive()) {
         return;
       }
-
+      if (!identical(_previewDelayTimer, thisTimer)) {
+        return;
+      }
       _previewStartScrollOffset = _scrollController.offset;
       setState(() {
         _activePreviewKey = previewKey;
@@ -945,6 +949,7 @@ class _ContentRowsState extends State<_ContentRows>
       });
       await _startSharedPreview(item, previewKey);
     });
+    _previewDelayTimer = thisTimer;
   }
 
   bool _isPreviewRequestActive(int requestId, String previewKey) {
@@ -957,6 +962,7 @@ class _ContentRowsState extends State<_ContentRows>
   void _stopPreviewFor(AggregatedItem item) {
     final previewKey = _previewKeyFor(item);
     _previewDelayTimer?.cancel();
+    _previewDelayTimer = null;
     if (_activePreviewKey == previewKey && mounted) {
       _finishSharedPreview();
     }
@@ -967,7 +973,9 @@ class _ContentRowsState extends State<_ContentRows>
     bool updateUi = true,
   }) {
     _previewDelayTimer?.cancel();
+    _previewDelayTimer = null;
     _previewStopTimer?.cancel();
+    _previewStopTimer = null;
     _previewRequestId++;
     if (!kIsWeb) {
       unawaited(_previewPlayer?.setVolume(0));
@@ -1096,7 +1104,6 @@ class _ContentRowsState extends State<_ContentRows>
           return;
         }
       }
-
       _previewStopTimer = Timer(const Duration(seconds: 30), () {
         if (requestId == _previewRequestId && _activePreviewKey == previewKey) {
           _finishSharedPreview();
@@ -1482,7 +1489,6 @@ class _ContentRowsState extends State<_ContentRows>
       FocusScope.of(context).nextFocus();
       return;
     }
-
     _finishSharedPreview(releaseResources: true);
     _suppressNextRowPreviewFromMediaBar = true;
     _forceRevealOnNextRowFocusFromMediaBar = true;
