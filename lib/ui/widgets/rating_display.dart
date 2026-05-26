@@ -11,6 +11,10 @@ final _textShadows = [
 ];
 const _coreRatingSources = {'tomatoes', 'stars'};
 
+String _normalizeRatingSource(String source) {
+  return source == 'popcorn' ? 'tomatoes_audience' : source;
+}
+
 class RatingsRow extends StatelessWidget {
   final Map<String, double> ratings;
   final double? communityRating;
@@ -37,6 +41,7 @@ class RatingsRow extends StatelessWidget {
         .split(',')
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
+        .map(_normalizeRatingSource)
         .toSet();
 
     final allRatings = <String, double>{};
@@ -46,8 +51,9 @@ class RatingsRow extends StatelessWidget {
     }
 
     for (final entry in ratings.entries) {
-      if (entry.key == 'tomatoes' && criticRating != null) continue;
-      allRatings[entry.key] = entry.value;
+      final source = _normalizeRatingSource(entry.key);
+      if (source == 'tomatoes' && criticRating != null) continue;
+      allRatings[source] = entry.value;
     }
 
     if (!allRatings.containsKey('tomatoes') && criticRating != null) {
@@ -68,6 +74,7 @@ class RatingsRow extends StatelessWidget {
         .split(',')
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
+      .map(_normalizeRatingSource)
         .toList();
     final enabledOrder = {
       for (var i = 0; i < enabledList.length; i++) enabledList[i]: i,

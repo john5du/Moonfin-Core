@@ -78,7 +78,10 @@ class MdbListRepository {
           ?.cast<Map<String, dynamic>>()
           .where((r) => r['source'] != null)
           .map((r) {
-            final source = (r['source'] as String).toLowerCase();
+            final rawSource = (r['source'] as String).toLowerCase();
+            final source = rawSource == 'popcorn'
+                ? 'tomatoes_audience'
+                : rawSource;
             final value = switch (source) {
               'metacriticuser' =>
                 (r['score'] as num?)?.toDouble() ??
