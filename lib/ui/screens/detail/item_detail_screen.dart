@@ -700,6 +700,10 @@ class _DetailContentState extends State<_DetailContent> {
     return Focus(
       focusNode: _contentFocusNode,
       onKeyEvent: (node, event) {
+        final primaryFocus = FocusManager.instance.primaryFocus;
+        if (!identical(primaryFocus, _contentFocusNode)) {
+          return KeyEventResult.ignored;
+        }
         if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
             event.logicalKey == LogicalKeyboardKey.arrowUp) {
           final navbarPos = prefs.get(UserPreferences.navbarPosition);
