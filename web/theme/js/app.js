@@ -994,11 +994,92 @@ function renderSettings(){
 
 function renderAll(){ renderHome(); renderDetail(); renderPlayer(); renderSearch(); renderLibrary(); renderEpg(); renderSettings(); }
 
+const TOKEN_META = {
+  'colors.background': {label:'App Background', hint:'Main app canvas/background'},
+  'colors.onBackground': {label:'Text on App Background', hint:'Primary text/icons over background'},
+  'colors.surface': {label:'Card/Panel Surface', hint:'Cards, rails, and panel fills'},
+  'colors.onSurface': {label:'Text on Surface', hint:'Text/icons shown on cards and panels'},
+  'colors.surfaceVariant': {label:'Alternate Surface', hint:'Secondary panel/surface shade'},
+  'colors.scrim': {label:'Overlay Scrim', hint:'Dim overlay for backdrops/modals'},
+  'colors.accent': {label:'Accent Color', hint:'Primary highlight/action color'},
+  'colors.onAccent': {label:'Text on Accent', hint:'Text/icons rendered on accent fills'},
+  'colors.buttonNormal': {label:'Button Fill (Normal)', hint:'Default button background'},
+  'colors.buttonFocused': {label:'Button Fill (Focused)', hint:'Focused state fill color'},
+  'colors.buttonDisabled': {label:'Button Fill (Disabled)', hint:'Disabled state fill color'},
+  'colors.buttonActive': {label:'Button Fill (Pressed)', hint:'Pressed/active state fill color'},
+  'colors.onButtonNormal': {label:'Button Text (Normal)', hint:'Text/icons on normal buttons'},
+  'colors.onButtonFocused': {label:'Button Text (Focused)', hint:'Text/icons on focused buttons'},
+  'colors.onButtonDisabled': {label:'Button Text (Disabled)', hint:'Text/icons on disabled buttons'},
+  'colors.inputBackground': {label:'Input Fill (Normal)', hint:'Default text field/input fill'},
+  'colors.inputFocused': {label:'Input Fill (Focused)', hint:'Focused input fill color'},
+  'colors.inputBorder': {label:'Input Border (Normal)', hint:'Default input border color'},
+  'colors.inputBorderFocused': {label:'Input Border (Focused)', hint:'Focused input border color'},
+  'colors.rangeTrack': {label:'Slider Track', hint:'Unfilled range/slider track'},
+  'colors.rangeProgress': {label:'Slider Progress', hint:'Filled range/slider progress'},
+  'colors.rangeThumb': {label:'Slider Thumb', hint:'Drag thumb/knob color'},
+  'colors.seekbarBuffered': {label:'Seekbar Buffered', hint:'Buffered media segment color'},
+  'colors.badgeBackground': {label:'Badge Fill', hint:'Generic badge background'},
+  'colors.onBadge': {label:'Badge Text', hint:'Text/icons shown on badges'},
+  'colors.badgeUnplayed': {label:'Unplayed Indicator', hint:'Unplayed dot/marker color'},
+  'colors.badgeWatched': {label:'Watched Indicator', hint:'Watched/check badge color'},
+  'colors.recordingActive': {label:'Recording (Live)', hint:'Live recording indicator color'},
+  'colors.recordingScheduled': {label:'Recording (Scheduled)', hint:'Scheduled recording indicator color'},
+  'semantic.statusAvailable': {label:'Status: Available', hint:'Available state semantic color'},
+  'semantic.statusRequested': {label:'Status: Requested', hint:'Requested state semantic color'},
+  'semantic.statusPending': {label:'Status: Pending', hint:'Pending state semantic color'},
+  'semantic.statusDownloading': {label:'Status: Downloading', hint:'Downloading state semantic color'},
+  'semantic.mediaTypeBadgeMovie': {label:'Media Badge: Movie', hint:'Movie media-type badge color'},
+  'semantic.mediaTypeBadgeShow': {label:'Media Badge: Show', hint:'Series/show media-type badge color'},
+  'book.background': {label:'Book View Background', hint:'Bookshelf/background tone'},
+  'book.accent': {label:'Book Accent', hint:'Accent color in book surfaces'},
+  'book.mutedText': {label:'Book Secondary Text', hint:'Lower-emphasis text in book UI'},
+  'book.primaryText': {label:'Book Primary Text', hint:'Primary text in book UI'},
+  'book.sectionTitle': {label:'Book Section Title', hint:'Section heading text color'},
+  'book.divider': {label:'Book Divider', hint:'Section divider line color'},
+  'book.placeholder': {label:'Placeholder Cover Fill', hint:'Fallback cover background color'},
+  'book.shadow': {label:'Book Shadow Tint', hint:'Tint used for book card shadow'},
+  'book.gradientTop': {label:'Book Gradient (Top)', hint:'Top gradient stop color'},
+  'book.gradientBottom': {label:'Book Gradient (Bottom)', hint:'Bottom gradient stop color'},
+  'book.inactiveChip': {label:'Inactive Chip', hint:'Unselected chip background in book UI'},
+  'borders.cardBorder.color': {label:'Card Border Color', hint:'Border color around cards'},
+  'borders.cardBorder.width': {label:'Card Border Width', hint:'Card border thickness in px'},
+  'borders.chipBorder.color': {label:'Chip Border Color', hint:'Border color around chips'},
+  'borders.chipBorder.width': {label:'Chip Border Width', hint:'Chip border thickness in px'},
+  'borders.focusBorder.color': {label:'Focus Outline Color', hint:'Primary focus ring/outline color'},
+  'borders.focusBorder.width': {label:'Focus Outline Width', hint:'Focus outline thickness in px'},
+  'borders.chipBackground': {label:'Chip Background', hint:'Default chip fill color'},
+  'borders.navBorder.color': {label:'Navbar Border Color', hint:'Optional nav edge/border color'},
+  'borders.navBorder.width': {label:'Navbar Border Width', hint:'Optional nav edge thickness in px'},
+  'borders.focusGlow.color': {label:'Focus Glow Color', hint:'Glow tint for focused elements'},
+  'borders.focusGlow.blurRadius': {label:'Focus Glow Blur', hint:'Glow blur radius in px'},
+  'borders.focusGlow.spreadRadius': {label:'Focus Glow Spread', hint:'Glow spread radius in px'},
+  'borders.focusGlow.offsetX': {label:'Focus Glow Offset X', hint:'Horizontal glow offset in px'},
+  'borders.focusGlow.offsetY': {label:'Focus Glow Offset Y', hint:'Vertical glow offset in px'},
+  'textGlow.color': {label:'Text Glow Color', hint:'Glow tint around text'},
+  'textGlow.blurRadius': {label:'Text Glow Blur', hint:'Text glow blur radius in px'},
+  'textGlow.offsetX': {label:'Text Glow Offset X', hint:'Horizontal text glow offset in px'},
+  'textGlow.offsetY': {label:'Text Glow Offset Y', hint:'Vertical text glow offset in px'},
+  'navColorCycle': {label:'Navbar Gradient Slot', hint:'Color slot used by navbar color cycle'},
+  'book.placeholderPalette': {label:'Placeholder Palette Slot', hint:'Fallback palette color used for book placeholders'},
+};
+
+function tokenMeta(path, fallbackLabel){
+  const key = String(path || '');
+  const base = key.replace(/\.\d+(?=\.|$)/g, '');
+  const mapped = TOKEN_META[key] || TOKEN_META[base] || null;
+  const label = mapped && mapped.label ? mapped.label : fallbackLabel;
+  const hint = mapped && mapped.hint ? mapped.hint : '';
+  const keyLabel = key;
+  return {label, hint, keyLabel};
+}
+
 function mkCrow(label,path){
   const id='c_'+path.replace(/\./g,'_');
+  const meta=tokenMeta(path,label);
+  const title=[meta.hint, 'JSON key: '+meta.keyLabel].filter(Boolean).join('\n');
   return `
     <div class="crow" data-cpath="${path}">
-      <span class="clabel" title="${label}">${label}</span>
+      <span class="clabel" title="${title}"><span class="clabel-main">${meta.label}</span><span class="clabel-sub">${meta.keyLabel}</span></span>
       <div class="swatch" id="sw_${id}" onclick="openPick('${id}','${path}')">
         <div class="swatch-inner" id="swi_${id}"></div>
       </div>
@@ -1012,9 +1093,11 @@ function mkCrow(label,path){
 }
 function mkNrow(label,path,min,max,step){
   const id='n_'+path.replace(/\./g,'_');
+  const meta=tokenMeta(path,label);
+  const title=[meta.hint, 'JSON key: '+meta.keyLabel].filter(Boolean).join('\n');
   return `
     <div class="nrow">
-      <span class="clabel" title="${label}">${label}</span>
+      <span class="clabel" title="${title}"><span class="clabel-main">${meta.label}</span><span class="clabel-sub">${meta.keyLabel}</span></span>
       <input class="ninput" id="${id}" data-npath="${path}" type="number"
         min="${min}" max="${max}" step="${step||1}" oninput="onN(this)">
     </div>`;
