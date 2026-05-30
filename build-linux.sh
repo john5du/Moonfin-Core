@@ -461,15 +461,31 @@ build_flutter_binary() {
 
   if [ -n "${MOONFIN_MPV_PREFIX:-}" ] && [ -f "${MOONFIN_MPV_PREFIX}/lib/pkgconfig/mpv.pc" ]; then
     local mpv_pc_dir="${TEMP_DIR}/mpv-pkgconfig"
-    rm -rf "$mpv_pc_dir"
-    mkdir -p "$mpv_pc_dir"
+    local mpv_link_dir="${TEMP_DIR}/mpv-link"
+    rm -rf "$mpv_pc_dir" "$mpv_link_dir"
+    mkdir -p "$mpv_pc_dir" "$mpv_link_dir"
+
+    # ISOLATE libmpv for linking. media_kit links PkgConfig::mpv, whose mpv.pc has
+    # "Libs: -L<conda>/lib -lmpv". If we point that -L at conda's real lib dir, the
+    # WHOLE conda lib dir (its own glib/gobject/pango/cairo/harfbuzz copies) lands on
+    # the linker search path and shadows the system GTK stack with ABI-incompatible
+    # versions -> "clang: error: linker command failed" (and the "may be hidden by
+    # files in mpvenv/lib" warnings). So copy ONLY libmpv.so* into a private dir and
+    # make mpv.pc's libdir point there. libmpv's own deps (ffmpeg, etc.) are resolved
+    # at RUNTIME from our bundle, not at link time (shared lib, allow-shlib-undefined).
+    cp -a "${MOONFIN_MPV_PREFIX}"/lib/libmpv.so* "${mpv_link_dir}/" 2>/dev/null || true
+
+    # Rewrite mpv.pc: includes still come from conda, libs come from the isolated dir.
     sed -e "s|^prefix=.*|prefix=${MOONFIN_MPV_PREFIX}|" \
+        -e "s|^libdir=.*|libdir=${mpv_link_dir}|" \
       "${MOONFIN_MPV_PREFIX}/lib/pkgconfig/mpv.pc" > "${mpv_pc_dir}/mpv.pc"
 
     local sys_pc="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
     export PKG_CONFIG_PATH="${mpv_pc_dir}:${sys_pc}:${MOONFIN_MPV_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
     echo "Using conda-forge libmpv for the build: $(pkg-config --modversion mpv 2>/dev/null || echo '??')"
-    echo "  pkg-config mpv libdir: $(pkg-config --variable=libdir mpv 2>/dev/null || true)"
+    echo "  pkg-config mpv libdir (isolated): $(pkg-config --variable=libdir mpv 2>/dev/null || true)"
+    echo "  isolated libmpv dir contents:"
+    ls -l "$mpv_link_dir" 2>/dev/null | sed 's/^/    /' || true
   fi
 
   local attempt=1 max_attempts=3
