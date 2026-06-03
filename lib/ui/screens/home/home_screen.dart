@@ -2294,7 +2294,11 @@ class _ContentRowsState extends State<_ContentRows>
   Widget build(BuildContext context) {
     final rows = widget.viewModel.rows;
     final prefs = widget.prefs;
-    final posterSize = prefs.get(UserPreferences.posterSize);
+    final posterSize =
+        (_isHomeRowsStyleV2() &&
+            !prefs.containsPreference(UserPreferences.posterSize))
+        ? PosterSize.small
+        : prefs.get(UserPreferences.posterSize);
     final watchedBehavior = prefs.get(UserPreferences.watchedIndicatorBehavior);
     final focusColor = Color(prefs.get(UserPreferences.focusColor).colorValue);
     final cardExpansion = prefs.get(UserPreferences.cardFocusExpansion);
