@@ -32,6 +32,7 @@ import '../../l10n/app_localizations.dart';
 import '../../playback/inline_preview_engine.dart';
 import '../../playback/media3_player_backend.dart';
 import 'bounded_network_image.dart';
+import 'fullscreen_backdrop_switcher.dart';
 import 'rating_display.dart';
 import 'web_youtube_trailer.dart';
 
@@ -70,10 +71,8 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
   static const _previewRevealDelay = Duration(seconds: 3);
   static const _trailerResolveTimeout = Duration(seconds: 10);
   static const _trailerReadyTimeout = Duration(seconds: 5);
-  static const _pageAnimDuration = Duration(milliseconds: 220);
   static const _youtubeRevealBufferDelay = Duration(milliseconds: 900);
 
-  final _pageController = PageController();
   final _backgroundService = GetIt.instance<BackgroundService>();
   final _playbackManager = GetIt.instance<PlaybackManager>();
   final Media3PlayerBackend? _media3TrailerBackend = PlatformDetection.isTizen
@@ -172,7 +171,6 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
     _mainPlaybackSub?.cancel();
     _media3EventSub?.cancel();
     _disposeTrailerPlayer();
-    _pageController.dispose();
     widget.viewModel.removeListener(_onStateChanged);
     widget.prefs.removeListener(_onPrefsChanged);
     WidgetsBinding.instance.removeObserver(this);
@@ -463,19 +461,9 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
   }
 
   void _goToPage(int index) {
-    if (!_pageController.hasClients) {
-      // In MakD mobile we intentionally hide the local PageView layer,
-      // so update index/state directly for swipe + auto-advance behavior.
-      if (_currentIndex != index) {
-        _onPageChanged(index);
-      }
-      return;
+    if (_currentIndex != index) {
+      _onPageChanged(index);
     }
-    _pageController.animateToPage(
-      index,
-      duration: _pageAnimDuration,
-      curve: Curves.easeInOut,
-    );
   }
 
   void _onPageChanged(int index) {
@@ -1398,8 +1386,7 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
                     duration: const Duration(milliseconds: 250),
                     child: _BackdropLayer(
                       items: items,
-                      pageController: _pageController,
-                      onPageChanged: _onPageChanged,
+                      currentIndex: _currentIndex,
                     ),
                   ),
                   ..._buildVideoOverlays(),
@@ -1612,8 +1599,7 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
                       duration: const Duration(milliseconds: 250),
                       child: _BackdropLayer(
                         items: items,
-                        pageController: _pageController,
-                        onPageChanged: _onPageChanged,
+                        currentIndex: _currentIndex,
                       ),
                     ),
                   if (!isMobile) ..._buildVideoOverlays(),
@@ -2064,36 +2050,26 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
 
 class _BackdropLayer extends StatelessWidget {
   final List<MediaBarSlideItem> items;
-  final PageController pageController;
-  final ValueChanged<int> onPageChanged;
+  final int currentIndex;
 
-  const _BackdropLayer({
-    required this.items,
-    required this.pageController,
-    required this.onPageChanged,
-  });
+  const _BackdropLayer({required this.items, required this.currentIndex});
 
   @override
   Widget build(BuildContext context) {
+    final url = (currentIndex >= 0 && currentIndex < items.length)
+        ? items[currentIndex].backdropUrl
+        : null;
     return RepaintBoundary(
-      child: PageView.builder(
-        controller: pageController,
-        onPageChanged: onPageChanged,
-        itemCount: items.length,
-        allowImplicitScrolling: false,
-        itemBuilder: (context, index) {
-          final item = items[index];
-          if (item.backdropUrl == null) {
-            return ColoredBox(color: AppColorScheme.background);
-          }
-          return BoundedNetworkImage(
-            imageUrl: item.backdropUrl!,
-            minWidth: 640,
-            maxWidth: 1280,
-            errorBuilder: (_, _, _) =>
-                ColoredBox(color: AppColorScheme.background),
-          );
-        },
+      child: FullscreenBackdropSwitcher(
+        imageUrl: url,
+        duration: const Duration(milliseconds: 600),
+        imageBuilder: (imageUrl) => BoundedNetworkImage(
+          imageUrl: imageUrl,
+          minWidth: 640,
+          maxWidth: 1280,
+          errorBuilder: (_, _, _) =>
+              ColoredBox(color: AppColorScheme.background),
+        ),
       ),
     );
   }
