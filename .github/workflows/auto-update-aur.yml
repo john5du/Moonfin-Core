@@ -54,8 +54,8 @@ jobs:
           elif [ "$VERSION" != "$current_version" ] || [ "$VERSION" != "$current_srcinfo_version" ]; then
             echo "Update needed: PKGBUILD=$current_version, SRCINFO=$current_srcinfo_version, upstream=$VERSION"
             echo "needed=true" >> "$GITHUB_OUTPUT"
-          elif ! grep -q 'Moonfin-Client/Moonfin-Core' PKGBUILD; then
-            echo "PKGBUILD has a stale repo URL, re-syncing"
+          elif ! grep -q 'Moonfin-Client/Moonfin-Core' PKGBUILD || ! grep -q "'mpv'" PKGBUILD; then
+            echo "PKGBUILD is stale (repo URL or missing mpv dependency), re-syncing"
             echo "needed=true" >> "$GITHUB_OUTPUT"
           else
             echo "No update needed (version: $current_version)"
@@ -91,9 +91,9 @@ jobs:
           sed -i "s|^source=.*|source=(\"\${pkgname}-\${pkgver}.tar.gz::https://github.com/Moonfin-Client/Moonfin-Core/releases/download/\${pkgver}/Moonfin_Linux_v\${pkgver}.tar.gz\")|" PKGBUILD
 
           if grep -q '^depends=' PKGBUILD; then
-            sed -i "s/^depends=.*/depends=('gtk3' 'glib2' 'libsecret' 'webkit2gtk-4.1')/" PKGBUILD
+            sed -i "s/^depends=.*/depends=('gtk3' 'glib2' 'libsecret' 'webkit2gtk-4.1' 'mpv')/" PKGBUILD
           else
-            sed -i "/^pkgrel=/a depends=('gtk3' 'glib2' 'libsecret' 'webkit2gtk-4.1')" PKGBUILD
+            sed -i "/^pkgrel=/a depends=('gtk3' 'glib2' 'libsecret' 'webkit2gtk-4.1' 'mpv')" PKGBUILD
           fi
 
           printf '%s\n' \
@@ -108,6 +108,7 @@ jobs:
             "    depends = glib2" \
             "    depends = libsecret" \
             "    depends = webkit2gtk-4.1" \
+            "    depends = mpv" \
             "    provides = moonfin" \
             "    conflicts = moonfin" \
             "    source = moonfin-bin-${VERSION}.tar.gz::https://github.com/Moonfin-Client/Moonfin-Core/releases/download/${VERSION}/Moonfin_Linux_v${VERSION}.tar.gz" \
