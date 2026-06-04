@@ -103,7 +103,12 @@ Future<void> launchOfflinePlayback(
           onAutoNext: null,
         );
         for (final sub in nextResult.externalSubtitles) {
-          await backend.addExternalSubtitle(sub.path, title: sub.title, language: sub.language);
+          await backend.addExternalSubtitle(
+            sub.path,
+            title: sub.title,
+            language: sub.language,
+            codec: sub.codec,
+          );
         }
         tracker.startTracking(
           itemId: nextResult.itemId,
@@ -115,7 +120,12 @@ Future<void> launchOfflinePlayback(
   );
 
   for (final sub in result.externalSubtitles) {
-    await backend.addExternalSubtitle(sub.path, title: sub.title, language: sub.language);
+    await backend.addExternalSubtitle(
+      sub.path,
+      title: sub.title,
+      language: sub.language,
+      codec: sub.codec,
+    );
   }
   tracker.startTracking(
     itemId: result.itemId,

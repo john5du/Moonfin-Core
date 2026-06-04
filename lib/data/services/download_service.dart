@@ -12,6 +12,7 @@ import 'package:get_it/get_it.dart';
 import 'package:server_core/server_core.dart';
 
 import '../../platform/ios_storage.dart';
+import '../../playback/subtitle_formats.dart';
 import '../../preference/user_preferences.dart';
 import '../../util/download_utils.dart';
 import '../../util/platform_detection.dart';
@@ -1685,20 +1686,30 @@ class DownloadService extends ChangeNotifier {
   Future<void> _downloadExternalSubtitles(AggregatedItem item, Directory dir, String fileNameBase) async {
     final mediaSources = item.mediaSources;
     if (mediaSources.isEmpty) return;
+    final source = mediaSources.first;
+    final mediaSourceId = source['Id'] as String? ?? item.id;
+    final streams = (source['MediaStreams'] as List?) ?? [];
     final authOptions = Options(headers: _buildAuthHeaders());
-    final streams = (mediaSources.first['MediaStreams'] as List?) ?? [];
     for (final stream in streams) {
       if (stream is! Map<String, dynamic>) continue;
       if (stream['Type'] != 'Subtitle') continue;
-      final deliveryUrl = stream['DeliveryUrl'] as String?;
-      if (deliveryUrl == null || deliveryUrl.isEmpty) continue;
       final isExternal = stream['IsExternal'] == true;
       final supportsExternal = stream['SupportsExternalStream'] == true;
       if (!isExternal && !supportsExternal) continue;
-      final codec = (stream['Codec'] as String?) ?? 'srt';
       final index = stream['Index'] as int? ?? 0;
-      final subPath = '${dir.path}/${fileNameBase}_sub_$index.$codec';
-      final subUrl = '${_client.baseUrl}$deliveryUrl';
+      final ext = canonicalSubtitleCodec(stream['Codec'] as String?);
+      // DeliveryUrl is computed by the server during PlaybackInfo and is often
+      // absent from the plain item metadata. Fall back to the stable subtitle
+      // stream endpoint so offline downloads match the streaming path.
+      var deliveryUrl = stream['DeliveryUrl'] as String?;
+      if (deliveryUrl == null || deliveryUrl.isEmpty) {
+        deliveryUrl =
+            '/Videos/${item.id}/$mediaSourceId/Subtitles/$index/0/Stream.$ext';
+      }
+      final subUrl = deliveryUrl.startsWith('http')
+          ? deliveryUrl
+          : '${_client.baseUrl}$deliveryUrl';
+      final subPath = '${dir.path}/${fileNameBase}_sub_$index.$ext';
       try {
         await _downloadDio.download(subUrl, subPath, options: authOptions);
       } catch (_) {}

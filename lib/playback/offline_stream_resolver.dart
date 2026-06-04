@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../data/repositories/offline_repository.dart';
+import 'subtitle_formats.dart';
 
 class OfflineStreamResult {
   final String url;
@@ -26,12 +27,14 @@ class OfflineSubtitle {
   final String? title;
   final String? language;
   final int index;
+  final String? codec;
 
   const OfflineSubtitle({
     required this.path,
     this.title,
     this.language,
     required this.index,
+    this.codec,
   });
 }
 
@@ -61,25 +64,38 @@ class OfflineStreamResolver {
 
     final parentDir = file.parent;
     final fileNameBase = file.uri.pathSegments.last.replaceAll(RegExp(r'\.[^.]+$'), '');
+
+    final subFilesByIndex = <int, File>{};
+    final prefix = '${fileNameBase}_sub_';
+    if (await parentDir.exists()) {
+      await for (final entity in parentDir.list()) {
+        if (entity is! File) continue;
+        final name = entity.uri.pathSegments.last;
+        if (!name.startsWith(prefix)) continue;
+        final rest = name.substring(prefix.length);
+        final dot = rest.indexOf('.');
+        final idx = int.tryParse(dot >= 0 ? rest.substring(0, dot) : rest);
+        if (idx != null) subFilesByIndex[idx] = entity;
+      }
+    }
+
     final externalSubs = <OfflineSubtitle>[];
     for (final stream in mediaStreams) {
       if (stream['Type'] != 'Subtitle') continue;
-      final deliveryUrl = stream['DeliveryUrl'] as String?;
-      if (deliveryUrl == null || deliveryUrl.isEmpty) continue;
       final isExternal = stream['IsExternal'] == true;
       final supportsExternal = stream['SupportsExternalStream'] == true;
       if (!isExternal && !supportsExternal) continue;
-      final codec = (stream['Codec'] as String?) ?? 'srt';
       final index = stream['Index'] as int? ?? 0;
-      final subFile = File('${parentDir.path}/${fileNameBase}_sub_$index.$codec');
-      if (await subFile.exists()) {
-        externalSubs.add(OfflineSubtitle(
-          path: subFile.uri.toString(),
-          title: stream['DisplayTitle'] as String? ?? stream['Title'] as String?,
-          language: stream['Language'] as String?,
-          index: index,
-        ));
-      }
+      final subFile = subFilesByIndex[index];
+      if (subFile == null) continue;
+      final fileExt = subFile.uri.pathSegments.last.split('.').last;
+      externalSubs.add(OfflineSubtitle(
+        path: subFile.uri.toString(),
+        title: stream['DisplayTitle'] as String? ?? stream['Title'] as String?,
+        language: stream['Language'] as String?,
+        index: index,
+        codec: canonicalSubtitleCodec(fileExt),
+      ));
     }
 
     return OfflineStreamResult(
