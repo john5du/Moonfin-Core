@@ -58,24 +58,36 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - name: Set up signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_TYPE: ${{ secrets.ANDROID_KEYSTORE_TYPE }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          # Use printf (not echo) to avoid adding a trailing newline that can corrupt binary decode on some shells.
-          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release.keystore
+          # On PRs from forks the signing secrets are not available. Skip signing
+          # setup so Gradle falls back to debug signing and the build still runs.
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "No Android keystore secret; skipping release signing (debug-signed build)."
+            exit 0
+          fi
 
-          STORE_TYPE="${{ secrets.ANDROID_KEYSTORE_TYPE }}"
+          # Use printf (not echo) to avoid adding a trailing newline that can corrupt binary decode on some shells.
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+
           cat > android/keystore.properties <<EOF
           storeFile=../release.keystore
           storeType=$STORE_TYPE
-          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
           EOF
 
           # Fail fast with a clearer error if the keystore secret or type is wrong.
           if [ -n "$STORE_TYPE" ]; then
-            keytool -list -v -keystore android/app/release.keystore -storetype "$STORE_TYPE" -storepass "${{ secrets.ANDROID_STORE_PASSWORD }}" >/dev/null
+            keytool -list -v -keystore android/app/release.keystore -storetype "$STORE_TYPE" -storepass "$STORE_PASSWORD" >/dev/null
           else
-            keytool -list -v -keystore android/app/release.keystore -storepass "${{ secrets.ANDROID_STORE_PASSWORD }}" >/dev/null
+            keytool -list -v -keystore android/app/release.keystore -storepass "$STORE_PASSWORD" >/dev/null
           fi
 
       - name: Build
@@ -142,6 +154,14 @@ jobs:
           MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: |
+          # On PRs from forks the certificate secret is not available. Skip the
+          # signing setup; build-macos.sh produces an unsigned build when no
+          # identity is present.
+          if [ -z "$MACOS_CERTIFICATE_BASE64" ]; then
+            echo "No macOS certificate secret; skipping signing setup (unsigned build)."
+            exit 0
+          fi
+
           CERT_PATH="$RUNNER_TEMP/certificate.p12"
           KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
           KEYCHAIN_PASSWORD="$(openssl rand -hex 20)"

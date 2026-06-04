@@ -40,6 +40,9 @@ val keystoreStoreType = keystoreProperties
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
 
+val hasReleaseKeystore = rootProject.file("app/release.keystore").exists() &&
+    (keystoreProperties.getProperty("keyAlias")?.isNotBlank() == true)
+
 android {
     namespace = "org.moonfin.androidtv"
     compileSdk = 36
@@ -106,17 +109,23 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.keystore")
-            storeType = keystoreStoreType
-            storePassword = keystoreProperties["storePassword"] as String?
-            keyAlias = keystoreProperties["keyAlias"] as String?
-            keyPassword = keystoreProperties["keyPassword"] as String?
+            if (hasReleaseKeystore) {
+                storeFile = file("release.keystore")
+                storeType = keystoreStoreType
+                storePassword = keystoreProperties["storePassword"] as String?
+                keyAlias = keystoreProperties["keyAlias"] as String?
+                keyPassword = keystoreProperties["keyPassword"] as String?
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
