@@ -94,6 +94,12 @@ class PlaybackMediaSource {
   final String? eTag;
   final String? container;
   final int? bitrate;
+
+  final String? path;
+
+  final String? protocol;
+  final bool isRemote;
+
   final bool supportsDirectPlay;
   final bool supportsDirectStream;
   final bool supportsTranscoding;
@@ -110,6 +116,9 @@ class PlaybackMediaSource {
     this.eTag,
     this.container,
     this.bitrate,
+    this.path,
+    this.protocol,
+    this.isRemote = false,
     this.supportsDirectPlay = false,
     this.supportsDirectStream = false,
     this.supportsTranscoding = false,
@@ -128,6 +137,9 @@ class PlaybackMediaSource {
         eTag: (json['ETag'] as String?) ?? (json['Etag'] as String?),
         container: json['Container'] as String?,
         bitrate: json['Bitrate'] as int?,
+        path: json['Path'] as String?,
+        protocol: json['Protocol'] as String?,
+        isRemote: json['IsRemote'] as bool? ?? false,
         supportsDirectPlay: json['SupportsDirectPlay'] as bool? ?? false,
         supportsDirectStream: json['SupportsDirectStream'] as bool? ?? false,
         supportsTranscoding: json['SupportsTranscoding'] as bool? ?? false,

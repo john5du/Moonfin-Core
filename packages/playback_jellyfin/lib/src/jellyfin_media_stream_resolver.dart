@@ -128,7 +128,9 @@ class JellyfinMediaStreamResolver implements MediaStreamResolver {
         .firstWhere((value) => value != null && value.isNotEmpty, orElse: () => null);
     final normalizationGainDb =
         MediaStreamResolver.extractNormalizationGainDb(source.mediaStreams);
-    final requestHeaders = _buildRequestHeaders();
+    final requestHeaders = _isServerUrl(url)
+        ? _buildRequestHeaders()
+        : const <String, String>{};
 
     return StreamResolutionResult(
       streamUrl: url,
@@ -169,9 +171,12 @@ class JellyfinMediaStreamResolver implements MediaStreamResolver {
     return directStream ?? transcode ?? sources.first;
   }
 
+  bool _isServerUrl(String url) => url.startsWith(_client.baseUrl);
+
   String _appendAuth(String url) {
     final token = _client.accessToken;
     if (token == null || token.isEmpty) return url;
+    if (!_isServerUrl(url)) return url;
     final lowerUrl = url.toLowerCase();
     if (lowerUrl.contains('api_key=') || lowerUrl.contains('apikey=')) return url;
     final separator = url.contains('?') ? '&' : '?';
@@ -200,6 +205,19 @@ class JellyfinMediaStreamResolver implements MediaStreamResolver {
     PlaybackMediaSource source, {
     bool isAudio = false,
   }) {
+    final remotePath = source.path;
+    final isManagedLiveStream =
+        source.liveStreamId != null && source.liveStreamId!.isNotEmpty;
+    if (source.supportsDirectPlay &&
+        source.isRemote &&
+        !isManagedLiveStream &&
+        source.protocol?.toLowerCase() == 'http' &&
+        remotePath != null &&
+        (remotePath.startsWith('http://') ||
+            remotePath.startsWith('https://'))) {
+      return (remotePath, StreamPlayMethod.directPlay);
+    }
+
     if (source.supportsDirectPlay && isAudio) {
       return (
         _buildDirectPlayAudioUrl(itemId, source),

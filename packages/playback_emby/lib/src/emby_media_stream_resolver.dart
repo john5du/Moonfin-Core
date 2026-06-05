@@ -106,6 +106,9 @@ class EmbyMediaStreamResolver implements MediaStreamResolver {
     if (token == null || token.isEmpty) {
       return url;
     }
+    if (!url.startsWith(_client.baseUrl)) {
+      return url;
+    }
     final lower = url.toLowerCase();
     if (lower.contains('api_key=') || lower.contains('x-emby-token=')) {
       return url;
@@ -136,6 +139,19 @@ class EmbyMediaStreamResolver implements MediaStreamResolver {
     String itemId,
     PlaybackMediaSource source,
   ) {
+    final remotePath = source.path;
+    final isManagedLiveStream =
+        source.liveStreamId != null && source.liveStreamId!.isNotEmpty;
+    if (source.supportsDirectPlay &&
+        source.isRemote &&
+        !isManagedLiveStream &&
+        source.protocol?.toLowerCase() == 'http' &&
+        remotePath != null &&
+        (remotePath.startsWith('http://') ||
+            remotePath.startsWith('https://'))) {
+      return (remotePath, StreamPlayMethod.directPlay);
+    }
+
     if (source.supportsDirectPlay) {
       return (
         _client.playbackApi.getStreamUrl(itemId, mediaSourceId: source.id),
