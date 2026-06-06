@@ -335,6 +335,9 @@ class MediaKitPlayerBackend implements PlayerBackend {
         _nativeSetProperty(platform, 'audio-normalize-downmix', 'no');
         _nativeSetProperty(platform, 'audio-fallback-to-null', 'no');
       }
+      if (PlatformDetection.isIOS) {
+        _nativeSetProperty(platform, 'audio-channels', 'stereo');
+      }
       if (PlatformDetection.isIOS || PlatformDetection.isAndroid) {
         _nativeSetProperty(platform, 'tone-mapping', 'auto');
       }
@@ -365,7 +368,12 @@ class MediaKitPlayerBackend implements PlayerBackend {
     } else {
       controller = VideoController(
         player,
-        configuration: VideoControllerConfiguration(hwdec: hwdec),
+        configuration: VideoControllerConfiguration(
+          hwdec: hwdec,
+          enableHardwareAcceleration:
+              !(PlatformDetection.isIOS &&
+                  PlatformDetection.iosMajorVersion >= 26),
+        ),
       );
     }
 

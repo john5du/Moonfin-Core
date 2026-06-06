@@ -55,8 +55,8 @@ class AudioCapabilityProfile {
       canPassthroughDtsX = false,
       canPassthroughTrueHd = false,
       canPassthroughTrueHdJoc = false,
-      maxPcmChannels = 2,
-      activeRouteType = AudioRouteType.speaker,
+      maxPcmChannels = 8,
+      activeRouteType = AudioRouteType.other,
       routeSupportsHdAudio = false;
 
   final bool canDecodeAc3;

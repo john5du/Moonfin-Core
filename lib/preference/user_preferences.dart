@@ -54,7 +54,7 @@ class UserPreferences extends ChangeNotifier {
     }
   }
 
-  /// Initialize local language preferences from the current server's 
+  /// Initialize local language preferences from the current server's
   /// [UserConfiguration].  This will not overwrite explicitly set preferences,
   ///  only keys that are missing.
   ///
@@ -120,10 +120,7 @@ class UserPreferences extends ChangeNotifier {
         values: pref.values.cast<Enum>(),
       );
     }
-    return Preference<dynamic>(
-      key: scopedKey,
-      defaultValue: pref.defaultValue,
-    );
+    return Preference<dynamic>(key: scopedKey, defaultValue: pref.defaultValue);
   }
 
   T get<T>(Preference<T> pref) {
@@ -650,7 +647,7 @@ class UserPreferences extends ChangeNotifier {
 
   static final hardwareDecoding = Preference(
     key: 'hardware_decoding',
-    defaultValue: PlatformDetection.isAndroid,
+    defaultValue: PlatformDetection.isAndroid || PlatformDetection.isIOS,
   );
 
   static final playbackEnginePreference = EnumPreference(

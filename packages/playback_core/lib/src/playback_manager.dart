@@ -46,6 +46,7 @@ class PlaybackManager {
   StreamResolutionResult? _lastPlaybackResolution;
   int? _audioStreamIndex;
   int? _subtitleStreamIndex;
+  bool _subtitleSelectionExplicit = false;
   String? _mediaSourceId;
   String? _pendingItemOverrideId;
   int? _pendingItemAudioStreamIndex;
@@ -475,6 +476,7 @@ class PlaybackManager {
 
     _audioStreamIndex = _pendingItemAudioStreamIndex;
     _subtitleStreamIndex = _pendingItemSubtitleStreamIndex;
+    _subtitleSelectionExplicit = false;
     _mediaSourceId = _pendingItemMediaSourceId;
     _clearPendingItemOverrides();
   }
@@ -673,6 +675,7 @@ class PlaybackManager {
     _resetBackendSelectionLock();
     _audioStreamIndex = audioStreamIndex;
     _subtitleStreamIndex = subtitleStreamIndex;
+    _subtitleSelectionExplicit = false;
     _mediaSourceId = mediaSourceId;
     _forceTranscodeForQueue = !enableDirectPlay && !enableDirectStream;
     final adjuster = _startPositionAdjuster;
@@ -1408,6 +1411,7 @@ class PlaybackManager {
     final previousSubtitleStreamIndex = _subtitleStreamIndex;
     final isBitmap = _isSubtitleBitmap(streamIndex);
     _subtitleStreamIndex = streamIndex;
+    _subtitleSelectionExplicit = streamIndex >= 0;
 
     await _applySubtitleRendererModeForStream(streamIndex);
 
@@ -1557,9 +1561,13 @@ class PlaybackManager {
       final isBitmap = _isSubtitleBitmap(_subtitleStreamIndex!);
       final canRenderBitmap = _backend?.canRenderBitmapSubtitles ?? false;
       if (isBitmap && !canRenderBitmap) {
-        if (_currentResolution?.playMethod == StreamPlayMethod.directPlay &&
+        if (_subtitleSelectionExplicit &&
+            _currentResolution?.playMethod == StreamPlayMethod.directPlay &&
             !_isOfflinePlayback) {
           await _reResolveAtCurrentPosition(forceTranscode: true);
+        } else {
+          await _resetSubtitleRendererMode();
+          await _backend?.disableSubtitleTrack();
         }
       } else {
         await _applySubtitleRendererModeForStream(_subtitleStreamIndex!);

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import 'os_version_stub.dart' if (dart.library.io) 'os_version_io.dart';
+
 class PlatformDetection {
   const PlatformDetection._();
 
@@ -19,6 +21,7 @@ class PlatformDetection {
       !kIsWeb && !isTizen && defaultTargetPlatform == TargetPlatform.android;
   static bool get isIOS =>
       !kIsWeb && !isTizen && defaultTargetPlatform == TargetPlatform.iOS;
+  static int get iosMajorVersion => isIOS ? osMajorVersion() : 0;
   static bool get isMacOS =>
       !kIsWeb && !isTizen && defaultTargetPlatform == TargetPlatform.macOS;
   static bool get isWindows =>
@@ -43,7 +46,8 @@ class PlatformDetection {
   static void setTvMode(bool value) => _isTv = value;
 
   static final Set<String> _displayHdrTypes = <String>{};
-  static final Map<String, dynamic> _mediaCodecCapabilities = <String, dynamic>{};
+  static final Map<String, dynamic> _mediaCodecCapabilities =
+      <String, dynamic>{};
   static final Map<String, dynamic> _audioCapabilities = <String, dynamic>{};
   static bool _hasDolbyVisionCodecCapabilities = false;
   static bool _supportsDoViProfile5 = false;
@@ -71,9 +75,12 @@ class PlatformDetection {
   static bool get supportsAc3Audio => _audioCapabilityBool('supportsAc3');
   static bool get supportsDtsAudio => _audioCapabilityBool('supportsDts');
   static bool get supportsTrueHdAudio => _audioCapabilityBool('supportsTrueHd');
-  static bool get supportsEac3Audio => _audioCapabilityBool('canPassthroughEac3');
-  static bool get supportsDtsHdAudio => _audioCapabilityBool('canPassthroughDtsHd');
-  static bool get supportsDtsXAudio => _audioCapabilityBool('canPassthroughDtsX');
+  static bool get supportsEac3Audio =>
+      _audioCapabilityBool('canPassthroughEac3');
+  static bool get supportsDtsHdAudio =>
+      _audioCapabilityBool('canPassthroughDtsHd');
+  static bool get supportsDtsXAudio =>
+      _audioCapabilityBool('canPassthroughDtsX');
   static bool get supportsEac3JocAudio =>
       _audioCapabilityBool('canPassthroughEac3Joc');
   static bool get supportsTrueHdJocAudio =>
