@@ -917,6 +917,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    if (_isInPiP && GetIt.instance.isRegistered<PlaybackArbiter>()) {
+      GetIt.instance<PlaybackArbiter>().pipActive = false;
+    }
     _screensaverPlayingSub?.cancel();
     _screensaverController.setPlaybackActive(false);
     _prefs.removeListener(_syncMediaQueuingPreference);
@@ -1366,6 +1369,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _onPiPChanged(bool isInPiP) {
+    if (GetIt.instance.isRegistered<PlaybackArbiter>()) {
+      GetIt.instance<PlaybackArbiter>().pipActive = isInPiP;
+    }
     if (!mounted) return;
     setState(() => _isInPiP = isInPiP);
     if (!isInPiP) {

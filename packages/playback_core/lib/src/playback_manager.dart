@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'media_stream_resolver.dart';
+import 'playback_arbiter.dart';
 import 'player_backend.dart';
 import 'player_service.dart';
 import 'player_state.dart';
 import 'queue_service.dart';
 import 'stream_resolution_result.dart';
 
-class PlaybackManager {
+class PlaybackManager implements AudioOwnable {
   static const _mediaReadyPollInterval = Duration(milliseconds: 100);
   static const _defaultMediaReadyTimeout = Duration(seconds: 60);
   static const _onlineStartupReadyTimeout = Duration(seconds: 15);
@@ -291,6 +292,25 @@ class PlaybackManager {
     selector,
   ) {
     _backendSelector = selector;
+  }
+
+  PlaybackArbiter? _arbiter;
+
+  void setAudioArbiter(PlaybackArbiter arbiter) {
+    _arbiter = arbiter;
+    arbiter.register(this);
+  }
+
+  @override
+  AudioProducer get audioProducerId => AudioProducer.mainPlayback;
+
+  @override
+  Future<void> onAudioRevoked(RevokeReason reason) async {
+    if (reason == RevokeReason.background) {
+      await pause();
+    } else {
+      await stop(userInitiated: false);
+    }
   }
 
   void setTranscodeSelector(
@@ -898,6 +918,7 @@ class PlaybackManager {
         headers: resolution.requestHeaders,
         normalizationGainDb: resolution.normalizationGainDb,
       );
+      await _arbiter?.acquire(AudioProducer.mainPlayback);
       await _backend!.play(
         backendMediaPayload,
         startPosition: useNativeStart ? startPosition : Duration.zero,

@@ -366,8 +366,12 @@ class Media3PlayerBackend implements PlayerBackend {
   }
 
   @override
-  Future<void> stop() async {
-    await _invoke<void>('stop');
+  Future<void> stop() => _teardown('stop');
+
+  Future<void> release() => _teardown('release');
+
+  Future<void> _teardown(String command) async {
+    await _invoke<void>(command);
     if (_isPlaying) {
       _isPlaying = false;
       _playingStream.add(false);

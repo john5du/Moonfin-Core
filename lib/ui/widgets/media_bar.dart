@@ -69,7 +69,9 @@ class MediaBar extends StatefulWidget {
   State<MediaBar> createState() => _MediaBarState();
 }
 
-class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
+class _MediaBarState extends State<MediaBar>
+    with WidgetsBindingObserver
+    implements AudioOwnable {
   static const _openTimeout = Duration(seconds: 10);
   static const _previewRevealDelay = Duration(seconds: 3);
   static const _trailerResolveTimeout = Duration(seconds: 10);
@@ -78,6 +80,7 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
 
   final _backgroundService = GetIt.instance<BackgroundService>();
   final _playbackManager = GetIt.instance<PlaybackManager>();
+  final _audioArbiter = GetIt.instance<PlaybackArbiter>();
   final Media3PlayerBackend? _media3TrailerBackend = PlatformDetection.isTizen
       ? null
       : GetIt.instance<Media3PlayerBackend>();
@@ -166,10 +169,26 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
     widget.viewModel.addListener(_onStateChanged);
     widget.prefs.addListener(_onPrefsChanged);
     WidgetsBinding.instance.addObserver(this);
+    _audioArbiter.register(this);
+  }
+
+  @override
+  AudioProducer get audioProducerId => AudioProducer.mediaBarTrailer;
+
+  @override
+  Future<void> onAudioRevoked(RevokeReason reason) async {
+    _cancelTrailerPreview();
+    try {
+      await _trailerPlayer?.stop();
+    } catch (_) {}
+    try {
+      await _media3TrailerBackend?.release();
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _audioArbiter.unregister(this);
     _autoAdvanceTimer?.cancel();
     _trailerRevealTimer?.cancel();
     _youTubeRevealTimer?.cancel();
@@ -670,7 +689,7 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
     _isTrailerPlaying = false;
     if (_trailerUsingMedia3) {
       _trailerUsingMedia3 = false;
-      unawaited(_media3TrailerBackend!.stop());
+      unawaited(_media3TrailerBackend!.release());
     } else {
       _trailerPlayer?.stop();
     }
@@ -845,6 +864,9 @@ class _MediaBarState extends State<MediaBar> with WidgetsBindingObserver {
     if (_activeTrailerItemId != item.itemId) return;
     if (widget.externallyPaused) return;
     if (!_isHomeRouteActive) return;
+
+    await _audioArbiter.acquire(AudioProducer.mediaBarTrailer);
+    if (!mounted || resolveId != _trailerResolveId) return;
 
     if (_pendingYouTubeVideoId != null) {
       _isTrailerPlaying = true;

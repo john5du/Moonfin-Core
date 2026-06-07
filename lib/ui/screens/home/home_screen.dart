@@ -531,13 +531,15 @@ class _ContentRows extends StatefulWidget {
 }
 
 class _ContentRowsState extends State<_ContentRows>
-  with WidgetsBindingObserver, WindowListener {
+  with WidgetsBindingObserver, WindowListener
+    implements AudioOwnable {
   static const double _kHomeRowLabelInset = 16.0;
   static const double _focusedRowExtraSpacing = 20.0;
   static const Duration _focusedRowSpacingDuration = Duration(milliseconds: 200);
   final _scrollController = ScrollController();
   final _mediaBarFocusNode = FocusNode(debugLabel: 'home_media_bar_focus');
   final _playbackManager = GetIt.instance<PlaybackManager>();
+  final _audioArbiter = GetIt.instance<PlaybackArbiter>();
   final Media3PlayerBackend? _media3PreviewBackend = PlatformDetection.isTizen
       ? null
       : GetIt.instance<Media3PlayerBackend>();
@@ -580,6 +582,7 @@ class _ContentRowsState extends State<_ContentRows>
   DateTime? _lastVerticalNavAt;
   bool _verticalNavInFlight = false;
   bool _chromeFocusActive = false;
+  bool _chromeAudioActive = false;
   bool _windowHasFocus = true;
   bool _holdMediaBarWhileSidebarFocused = false;
   bool get _isSidebarFocus => LeftSidebar.isFocusedNotifier.value;
@@ -645,18 +648,21 @@ class _ContentRowsState extends State<_ContentRows>
             !desktopUnfocused &&
             !onMediaBar &&
             !hasRowContext);
+    final chromeAudioActive = chromeFocusActive || onSidebar;
 
     final nextMediaBarVisible = isMobileUi
       ? true
       : onMediaBar ||
           _holdMediaBarWhileSidebarFocused ||
           (!onSidebar && _activeFocusedRowIndex == null);
-    final chromeChanged = _chromeFocusActive != chromeFocusActive;
+    final chromeChanged = _chromeFocusActive != chromeFocusActive ||
+        _chromeAudioActive != chromeAudioActive;
 
     if (_mediaBarVisible != nextMediaBarVisible || chromeChanged) {
       setState(() {
         _mediaBarVisible = nextMediaBarVisible;
         _chromeFocusActive = chromeFocusActive;
+        _chromeAudioActive = chromeAudioActive;
       });
     }
 
@@ -671,7 +677,7 @@ class _ContentRowsState extends State<_ContentRows>
     _wasSidebarFocused = onSidebar;
     _lastGlobalPrimaryFocus = primary;
 
-    if (chromeFocusActive && (chromeChanged || _activePreviewKey != null)) {
+    if (chromeAudioActive && (chromeChanged || _activePreviewKey != null)) {
       _finishSharedPreview(releaseResources: true);
     }
   }
@@ -758,6 +764,7 @@ class _ContentRowsState extends State<_ContentRows>
     _lastObservedPath = appRouter.routerDelegate.currentConfiguration.uri.path;
     FocusManager.instance.addListener(_onGlobalFocusChanged);
     SettingsPanel.isOpenNotifier.addListener(_onSettingsPanelOpenChanged);
+    LeftSidebar.isFocusedNotifier.addListener(_onGlobalFocusChanged);
     _lastMedia3PreviewPreference = _useMedia3InlinePreview();
     widget.prefs.addListener(_onPreviewPrefsChanged);
     _previousFocusContentFromNavbarCallback =
@@ -768,13 +775,26 @@ class _ContentRowsState extends State<_ContentRows>
     _mainPlaybackSub = _playbackManager.state.playingStream.listen(
       _onMainPlaybackChanged,
     );
+    _audioArbiter.register(this);
     if (!_isMediaBarEnabledByMode()) {
       _infoRevealed = true;
     }
   }
 
   @override
+  AudioProducer get audioProducerId => AudioProducer.inlinePreview;
+
+  @override
+  Future<void> onAudioRevoked(RevokeReason reason) async {
+    _finishSharedPreview(releaseResources: true);
+    try {
+      await _media3PreviewBackend?.release();
+    } catch (_) {}
+  }
+
+  @override
   void dispose() {
+    _audioArbiter.unregister(this);
     appRouter.routerDelegate.removeListener(_onRouteChanged);
     WidgetsBinding.instance.removeObserver(this);
     if (PlatformDetection.isDesktop) {
@@ -782,6 +802,7 @@ class _ContentRowsState extends State<_ContentRows>
     }
     FocusManager.instance.removeListener(_onGlobalFocusChanged);
     SettingsPanel.isOpenNotifier.removeListener(_onSettingsPanelOpenChanged);
+    LeftSidebar.isFocusedNotifier.removeListener(_onGlobalFocusChanged);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     if (identical(
@@ -1012,7 +1033,7 @@ class _ContentRowsState extends State<_ContentRows>
     }
     if (_previewUsingMedia3) {
       _previewUsingMedia3 = false;
-      unawaited(_media3PreviewBackend!.stop());
+      unawaited(_media3PreviewBackend!.release());
       _media3PreviewBackend.resetVolumeState();
     }
     if (releaseResources || kIsWeb) {
@@ -1090,6 +1111,10 @@ class _ContentRowsState extends State<_ContentRows>
           ? 0.0
           : (previewAudioEnabled ? 100.0 : 0.0);
       final useMedia3 = _useMedia3InlinePreview();
+      await _audioArbiter.acquire(AudioProducer.inlinePreview);
+      if (!_isPreviewRequestActive(requestId, previewKey)) {
+        return;
+      }
       if (useMedia3) {
         _previewUsingMedia3 = true;
         await _media3PreviewBackend!.setVolume(previewVolume);
@@ -2351,7 +2376,7 @@ class _ContentRowsState extends State<_ContentRows>
       widget.isHoverPaused ||
       !_isScrolledToTop ||
       _isActivelyScrolling ||
-      _chromeFocusActive;
+      _chromeAudioActive;
     final showInfoOverlay = _showHomeRowInfoOverlay();
     final safeTop = MediaQuery.of(context).padding.top;
     final desktopScale = _desktopUiScaleFactor();

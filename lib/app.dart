@@ -7,9 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
+import 'package:playback_core/playback_core.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'data/services/app_update_service.dart';
+import 'data/services/cast/cast_service.dart';
 import 'data/services/download_service.dart';
 import 'data/services/plugin_sync_service.dart';
 import 'di/providers.dart';
@@ -501,6 +503,23 @@ class _GlobalShortcutScopeState extends State<_GlobalShortcutScope>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final paused = state != AppLifecycleState.resumed;
     _screensaverController.activityPaused = paused;
+    _maybePausePlaybackForBackground(state);
+  }
+
+  void _maybePausePlaybackForBackground(AppLifecycleState state) {
+    if (!PlatformDetection.isTV) return;
+    final isBackground = state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached;
+    if (!isBackground) return;
+    if (!GetIt.instance.isRegistered<PlaybackArbiter>()) return;
+    final arbiter = GetIt.instance<PlaybackArbiter>();
+    if (arbiter.pipActive) return;
+    if (GetIt.instance.isRegistered<CastService>() &&
+        GetIt.instance<CastService>().activeKind != null) {
+      return;
+    }
+    unawaited(arbiter.pauseForBackground());
   }
 
   @override

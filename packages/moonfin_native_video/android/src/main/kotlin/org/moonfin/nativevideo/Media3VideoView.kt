@@ -910,6 +910,25 @@ class Media3VideoView(
         httpDataSourceFactory.setDefaultRequestProperties(currentHeaders)
     }
 
+    private fun releaseActivePlayer() {
+        if (isDisposed) return
+        cancelPendingAudioRekick()
+        closeExternalAudioEffectSessionIfOpen()
+        currentAudioSessionId = C.AUDIO_SESSION_ID_UNSET
+        restorePreferredDisplayMode()
+        detectedFrameRate = null
+        player.removeListener(listener)
+        player.removeAnalyticsListener(analyticsListener)
+        audioPipeline.release()
+        player.clearVideoSurface()
+        Media3SessionController.releaseForPlayer(player)
+        player.release()
+        player = createPlayer()
+        httpDataSourceFactory.setDefaultRequestProperties(currentHeaders)
+        firstFrameCover.visibility = View.VISIBLE
+        emitState()
+    }
+
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         handleControlCall(call, result)
     }
@@ -937,6 +956,11 @@ class Media3VideoView(
 
                 "stop" -> {
                     stopPlaybackAndRestoreDisplayMode()
+                    result.success(null)
+                }
+
+                "release" -> {
+                    releaseActivePlayer()
                     result.success(null)
                 }
 
@@ -1100,6 +1124,10 @@ class Media3VideoView(
 
                 "stop" -> {
                     stopPlaybackAndRestoreDisplayMode()
+                }
+
+                "release" -> {
+                    releaseActivePlayer()
                 }
 
                 "seek" -> {

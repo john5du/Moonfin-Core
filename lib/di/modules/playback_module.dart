@@ -487,6 +487,9 @@ void registerPlaybackModule() {
   });
   manager.setNextSeasonItemsProvider(_nextSeasonItemsProvider);
   manager.setResolverConfigurator(_ensureResolverForItem);
+  final audioArbiter = PlaybackArbiter();
+  _getIt.registerSingleton<PlaybackArbiter>(audioArbiter);
+  manager.setAudioArbiter(audioArbiter);
   _getIt.registerSingleton<PlaybackManager>(manager);
 
   _getIt.registerLazySingleton<OfflineStreamResolver>(
