@@ -55,6 +55,9 @@ class EmbyMediaStreamResolver implements MediaStreamResolver {
 
     if (playMethod == StreamPlayMethod.transcode) {
       url = MediaStreamResolver.applyStreamIndices(url, audioStreamIndex, subtitleStreamIndex);
+      url = url
+          .replaceFirst(RegExp(r'\?StartTimeTicks=\d+&'), '?')
+          .replaceFirst(RegExp(r'[&?]StartTimeTicks=\d+'), '');
     }
 
     url = _appendAuth(url);

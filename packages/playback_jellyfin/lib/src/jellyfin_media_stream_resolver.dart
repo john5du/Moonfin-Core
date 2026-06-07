@@ -94,6 +94,9 @@ class JellyfinMediaStreamResolver implements MediaStreamResolver {
 
     if (playMethod == StreamPlayMethod.transcode) {
       url = MediaStreamResolver.applyStreamIndices(url, audioStreamIndex, subtitleStreamIndex);
+      url = url
+          .replaceFirst(RegExp(r'\?StartTimeTicks=\d+&'), '?')
+          .replaceFirst(RegExp(r'[&?]StartTimeTicks=\d+'), '');
       if (!enableDirectPlay && subtitleStreamIndex != null && subtitleStreamIndex >= 0) {
         final smRegex = RegExp(r'SubtitleMethod=\w+');
         if (smRegex.hasMatch(url)) {
