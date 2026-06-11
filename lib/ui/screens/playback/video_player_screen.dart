@@ -2657,8 +2657,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   bool _isTvTemporarySpeedKey(LogicalKeyboardKey key) {
-    return key == LogicalKeyboardKey.mediaPause ||
-        key == LogicalKeyboardKey.mediaPlayPause;
+    return key == LogicalKeyboardKey.mediaPause;
   }
 
   bool _canUseTvTemporarySpeedHold() {
@@ -3154,9 +3153,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _focusTvPrimaryButton();
           return KeyEventResult.handled;
         case LogicalKeyboardKey.mediaPlayPause:
+        case LogicalKeyboardKey.space:
           _togglePlayPause();
           _showControls();
           _focusTvPrimaryButton();
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.mediaStop:
+          _exitPlayback();
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.mediaTrackNext:
+          unawaited(_manager.next());
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.mediaTrackPrevious:
+          unawaited(_manager.previous());
           return KeyEventResult.handled;
         case LogicalKeyboardKey.mediaFastForward:
           _seekRelative(_prefs.get(UserPreferences.skipForwardLength));
@@ -3173,6 +3182,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     switch (event.logicalKey) {
       case LogicalKeyboardKey.space:
+      case LogicalKeyboardKey.mediaPlayPause:
         _togglePlayPause();
         _showControls();
         return KeyEventResult.handled;
@@ -3186,10 +3196,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _showControls();
         _focusTvPrimaryButton();
         return KeyEventResult.handled;
-      case LogicalKeyboardKey.mediaPlayPause:
-        _togglePlayPause();
-        _showControls();
-        _focusTvPrimaryButton();
+      case LogicalKeyboardKey.mediaStop:
+        _exitPlayback();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.mediaTrackNext:
+        unawaited(_manager.next());
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.mediaTrackPrevious:
+        unawaited(_manager.previous());
         return KeyEventResult.handled;
       case LogicalKeyboardKey.mediaFastForward:
         _seekRelative(_prefs.get(UserPreferences.skipForwardLength));
