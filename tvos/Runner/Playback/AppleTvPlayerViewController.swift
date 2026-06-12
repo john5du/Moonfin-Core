@@ -14,6 +14,8 @@ final class AppleTvPlayerViewController: UIViewController {
     var onToggleFavorite: (() -> Void)?
     var onStillWatchingContinue: (() -> Void)?
     var onStillWatchingStop: (() -> Void)?
+    var onSearchSubtitles: (() -> Void)?
+    var onDownloadSubtitle: ((String) -> Void)?
     var baseSubtitlePos = 92
     private var didAttachSurface = false
     private var updateTimer: Timer?
@@ -31,6 +33,8 @@ final class AppleTvPlayerViewController: UIViewController {
     private var castPeople: [(name: String, subtitle: String, imageUrl: String)] = []
     private var canFavorite = false
     private var isFavorite = false
+    private var canDownloadSubtitles = false
+    private weak var subtitleSearchingAlert: UIAlertController?
     private var stillWatchingShown = false
     private var selectedBitrateMbps = -1
     private var logoUrlString = ""
@@ -773,6 +777,7 @@ final class AppleTvPlayerViewController: UIViewController {
         hasCast = (args["hasCast"] as? Bool) ?? false
         canFavorite = (args["canFavorite"] as? Bool) ?? false
         isFavorite = (args["isFavorite"] as? Bool) ?? false
+        canDownloadSubtitles = (args["canDownloadSubtitles"] as? Bool) ?? false
         if (args["showStillWatching"] as? Bool) == true {
             presentStillWatching()
         }
@@ -1450,8 +1455,57 @@ final class AppleTvPlayerViewController: UIViewController {
                     self?.onSelectSubtitle?(track.index)
                 })
         }
+        if canDownloadSubtitles {
+            sheet.addAction(
+                UIAlertAction(title: "Download Subtitles\u{2026}", style: .default) {
+                    [weak self] _ in
+                    self?.beginSubtitleSearch()
+                })
+        }
         sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(sheet, animated: true)
+    }
+
+    private func beginSubtitleSearch() {
+        let alert = UIAlertController(
+            title: "Searching for Subtitles\u{2026}", message: nil,
+            preferredStyle: .alert)
+        subtitleSearchingAlert = alert
+        present(alert, animated: true)
+        onSearchSubtitles?()
+    }
+
+    func presentRemoteSubtitleResults(_ results: [[String: Any]]) {
+        let show = { [weak self] in
+            guard let self else { return }
+            if results.isEmpty {
+                let alert = UIAlertController(
+                    title: "No Subtitles Found", message: nil, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "OK", style: .cancel))
+                self.present(alert, animated: true)
+                return
+            }
+            let sheet = UIAlertController(
+                title: "Download Subtitles", message: nil, preferredStyle: .actionSheet)
+            for result in results {
+                guard let id = result["id"] as? String, !id.isEmpty else { continue }
+                let label = (result["label"] as? String) ?? "Subtitle"
+                let subtitle = (result["subtitle"] as? String) ?? ""
+                let title = subtitle.isEmpty ? label : "\(label) \u{00B7} \(subtitle)"
+                sheet.addAction(
+                    UIAlertAction(title: title, style: .default) { [weak self] _ in
+                        self?.onDownloadSubtitle?(id)
+                    })
+            }
+            sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            self.present(sheet, animated: true)
+        }
+        if let searching = subtitleSearchingAlert {
+            subtitleSearchingAlert = nil
+            searching.dismiss(animated: true) { show() }
+        } else {
+            show()
+        }
     }
 
     private func presentChapterMenu() {

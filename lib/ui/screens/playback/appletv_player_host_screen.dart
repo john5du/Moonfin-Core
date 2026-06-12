@@ -13,6 +13,7 @@ import '../../../data/models/trickplay_info.dart';
 import '../../../data/services/media_segment_service.dart';
 import '../../../data/services/media_server_client_factory.dart';
 import '../../../data/repositories/item_mutation_repository.dart';
+import '../../../auth/repositories/user_repository.dart';
 import '../../../playback/appletv_mpv_backend.dart';
 import '../../../playback/playback_profile_diagnostics.dart';
 import '../../../preference/preference_constants.dart';
@@ -572,6 +573,178 @@ class _AppleTvPlayerHostScreenState extends State<AppleTvPlayerHostScreen> {
     return false;
   }
 
+  bool _canDownloadSubtitles(dynamic item) {
+    if (item is! AggregatedItem) return false;
+    final client = _clientForQueueItem(item);
+    if (client == null) return false;
+    bool canManage = false;
+    try {
+      canManage =
+          GetIt.instance<UserRepository>().currentUser?.canManageSubtitles ??
+          false;
+    } catch (_) {
+      return false;
+    }
+    final mediaType = item.rawData['MediaType'] as String?;
+    final isAudio =
+        item.type == 'Audio' ||
+        item.type == 'MusicAlbum' ||
+        item.type == 'AudioBook' ||
+        mediaType == 'Audio';
+    return client.serverType == ServerType.jellyfin &&
+        canManage &&
+        item.mediaSources.isNotEmpty &&
+        item.type != 'Photo' &&
+        item.type != 'Book' &&
+        !isAudio;
+  }
+
+  String _remoteSubtitleLanguage(
+    List<Map<String, dynamic>> subtitleStreams,
+    List<Map<String, dynamic>> audioStreams,
+  ) {
+    final preferred = GetIt.instance<UserPreferences>()
+        .get(UserPreferences.defaultSubtitleLanguage)
+        .trim()
+        .toLowerCase();
+    if (preferred.isNotEmpty &&
+        preferred != 'auto' &&
+        preferred != 'none') {
+      return preferred;
+    }
+    for (final stream in [...subtitleStreams, ...audioStreams]) {
+      final language = (stream['Language'] as String?)?.trim();
+      if (language != null && language.isNotEmpty) return language;
+    }
+    return 'eng';
+  }
+
+  String _remoteSubtitleOptionSubtitle(Map<String, dynamic> subtitle) {
+    final details = <String>[];
+    final language =
+        (subtitle['ThreeLetterISOLanguageName'] as String?)?.trim() ??
+        (subtitle['Language'] as String?)?.trim();
+    final provider = subtitle['ProviderName'] as String?;
+    final format = subtitle['Format'] as String?;
+    final rating = subtitle['CommunityRating'] as num?;
+    if (language != null && language.isNotEmpty) {
+      details.add(language.toUpperCase());
+    }
+    if (provider != null && provider.isNotEmpty) details.add(provider);
+    if (format != null && format.isNotEmpty) details.add(format.toUpperCase());
+    if (rating != null) details.add('${rating.toStringAsFixed(1)}*');
+    return details.join(' · ');
+  }
+
+  void _searchRemoteSubtitles() {
+    final manager = _manager;
+    final backend = _backend;
+    if (manager == null || backend == null) return;
+    final item = manager.queueService.currentItem;
+    if (item is! AggregatedItem) {
+      backend.showRemoteSubtitles(const []);
+      return;
+    }
+    final client = _clientForQueueItem(item);
+    if (client == null) {
+      backend.showRemoteSubtitles(const []);
+      return;
+    }
+    final allStreams =
+        manager.currentResolution?.mediaStreams ??
+        const <Map<String, dynamic>>[];
+    final subtitleStreams = allStreams
+        .where((s) => s['Type'] == 'Subtitle')
+        .toList();
+    final audioStreams = allStreams.where((s) => s['Type'] == 'Audio').toList();
+    final language = _remoteSubtitleLanguage(subtitleStreams, audioStreams);
+    () async {
+      var results = const <Map<String, dynamic>>[];
+      try {
+        results = await client.itemsApi.searchRemoteSubtitles(
+          item.id,
+          language: language,
+        );
+      } catch (_) {}
+      if (!mounted) return;
+      final mapped = results
+          .map((s) {
+            final id = (s['Id'] as String?) ?? '';
+            final label =
+                (s['Name'] as String?) ??
+                (s['Author'] as String?) ??
+                'Subtitle';
+            return {
+              'id': id,
+              'label': label,
+              'subtitle': _remoteSubtitleOptionSubtitle(s),
+            };
+          })
+          .where((m) => (m['id'] as String).isNotEmpty)
+          .toList();
+      backend.showRemoteSubtitles(mapped);
+    }();
+  }
+
+  void _downloadSubtitle(String subtitleId) {
+    final manager = _manager;
+    if (manager == null || subtitleId.isEmpty) return;
+    final item = manager.queueService.currentItem;
+    if (item is! AggregatedItem) return;
+    final client = _clientForQueueItem(item);
+    if (client == null) return;
+    final existingIndexes =
+        (manager.currentResolution?.mediaStreams ??
+                const <Map<String, dynamic>>[])
+            .where((s) => s['Type'] == 'Subtitle')
+            .map((s) => s['Index'] as int?)
+            .whereType<int>()
+            .toSet();
+    () async {
+      try {
+        await client.itemsApi.downloadRemoteSubtitle(item.id, subtitleId);
+        final newStream = await _refreshAndFindSubtitle(
+          item,
+          client,
+          existingIndexes,
+        );
+        final index = newStream?['Index'] as int?;
+        if (index != null) {
+          await manager.changeSubtitleTrack(index);
+        }
+      } catch (_) {
+      } finally {
+        if (mounted) _pushMetadata();
+      }
+    }();
+  }
+
+  Future<Map<String, dynamic>?> _refreshAndFindSubtitle(
+    AggregatedItem item,
+    MediaServerClient client,
+    Set<int> existingIndexes,
+  ) async {
+    for (var attempt = 0; attempt < 8; attempt++) {
+      try {
+        final raw = await client.itemsApi.getItem(item.id);
+        if (!mounted) return null;
+        final refreshed = AggregatedItem(
+          id: item.id,
+          serverId: item.serverId,
+          rawData: raw,
+        );
+        for (final s in refreshed.mediaStreams.where(
+          (s) => s['Type'] == 'Subtitle',
+        )) {
+          final index = s['Index'] as int?;
+          if (index != null && !existingIndexes.contains(index)) return s;
+        }
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    return null;
+  }
+
   void _toggleFavorite(dynamic item) {
     final itemId = _itemIdForQueueItem(item);
     if (itemId == null || itemId.isEmpty) return;
@@ -920,6 +1093,7 @@ class _AppleTvPlayerHostScreenState extends State<AppleTvPlayerHostScreen> {
       canFavorite: _canFavorite(item),
       isFavorite: _queueItemIsFavorite(item),
       showStillWatching: _pendingStillWatching,
+      canDownloadSubtitles: _canDownloadSubtitles(item),
     );
     _pendingStillWatching = false;
 
@@ -1016,6 +1190,11 @@ class _AppleTvPlayerHostScreenState extends State<AppleTvPlayerHostScreen> {
         _consecutiveEpisodes = 0;
       case 'stillWatchingStop':
         _handleExit();
+      case 'searchSubtitles':
+        _searchRemoteSubtitles();
+      case 'downloadSubtitle':
+        final id = action['id']?.toString();
+        if (id != null && id.isNotEmpty) _downloadSubtitle(id);
     }
     Future<void>.delayed(const Duration(milliseconds: 300), _pushMetadata);
   }

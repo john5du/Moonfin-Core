@@ -64,6 +64,9 @@ final class AppleTvVideoChannel: NSObject, FlutterStreamHandler {
         case "setUiMetadata":
             lastMetadata = args
             playerVC?.applyUiMetadata(args)
+        case "showRemoteSubtitles":
+            let results = (args["results"] as? [[String: Any]]) ?? []
+            playerVC?.presentRemoteSubtitleResults(results)
         case "configureSubtitleStyle":
             lastSubtitleStyle = args
             applySubtitleStyle(args)
@@ -176,6 +179,12 @@ final class AppleTvVideoChannel: NSObject, FlutterStreamHandler {
         }
         vc.onStillWatchingStop = { [weak self] in
             self?.send(["event": "stillWatchingStop"])
+        }
+        vc.onSearchSubtitles = { [weak self] in
+            self?.send(["event": "searchSubtitles"])
+        }
+        vc.onDownloadSubtitle = { [weak self] id in
+            self?.send(["event": "downloadSubtitle", "id": id])
         }
         if let meta = lastMetadata {
             vc.applyUiMetadata(meta)

@@ -132,6 +132,8 @@ class AppleTvMpvBackend implements PlayerBackend {
       case 'toggleFavorite':
       case 'stillWatchingContinue':
       case 'stillWatchingStop':
+      case 'searchSubtitles':
+      case 'downloadSubtitle':
         _uiActionStream.add(map.cast<String, dynamic>());
       case 'tracksChanged':
         _tracksKnown = true;
@@ -397,6 +399,7 @@ class AppleTvMpvBackend implements PlayerBackend {
     bool canFavorite = false,
     bool isFavorite = false,
     bool showStillWatching = false,
+    bool canDownloadSubtitles = false,
     bool isLive = false,
     Map<String, dynamic>? liveProgram,
     String liveChannelNumber = '',
@@ -426,12 +429,17 @@ class AppleTvMpvBackend implements PlayerBackend {
       'canFavorite': canFavorite,
       'isFavorite': isFavorite,
       'showStillWatching': showStillWatching,
+      'canDownloadSubtitles': canDownloadSubtitles,
       'isLive': isLive,
       'liveProgram': ?liveProgram,
       'liveChannelNumber': liveChannelNumber,
       'channelList': channelList,
       'streamStats': streamStats,
     });
+  }
+
+  Future<void> showRemoteSubtitles(List<Map<String, dynamic>> results) async {
+    await _invoke<void>('showRemoteSubtitles', {'results': results});
   }
 
   @override
