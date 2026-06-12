@@ -295,6 +295,7 @@ class _OverlaySheetState<T> extends State<_OverlaySheet<T>>
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event.logicalKey.isBackKey) {
       if (event is KeyDownEvent) {
+        DialogBackSuppressor.markDismissed();
         _close();
         return KeyEventResult.handled;
       }
