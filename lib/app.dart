@@ -955,7 +955,7 @@ class _TvUiScale extends StatelessWidget {
     final mq = MediaQuery.of(context);
     final realSize = mq.size;
     if (realSize.width <= 0) {
-      return _TvMetricsOverlay(child: child);
+      return child;
     }
     final scale = realSize.width / _designWidth;
     final logicalSize = Size(realSize.width / scale, realSize.height / scale);
@@ -969,45 +969,9 @@ class _TvUiScale extends StatelessWidget {
             size: logicalSize,
             devicePixelRatio: mq.devicePixelRatio * scale,
           ),
-          child: _TvMetricsOverlay(child: child),
+          child: child,
         ),
       ),
-    );
-  }
-}
-
-class _TvMetricsOverlay extends StatelessWidget {
-  const _TvMetricsOverlay({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    final size = mq.size;
-    final dpr = mq.devicePixelRatio;
-    final ts = mq.textScaler.scale(100) / 100;
-    return Stack(
-      textDirection: TextDirection.ltr,
-      children: [
-        child,
-        Positioned(
-          top: 8,
-          right: 8,
-          child: IgnorePointer(
-            child: Container(
-              color: const Color(0xCC000000),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              child: Text(
-                'size ${size.width.toStringAsFixed(0)}x${size.height.toStringAsFixed(0)}   '
-                'dpr ${dpr.toStringAsFixed(2)}   ts ${ts.toStringAsFixed(2)}',
-                textDirection: TextDirection.ltr,
-                style: const TextStyle(color: Color(0xFF00E676), fontSize: 18),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
