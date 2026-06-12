@@ -10,6 +10,7 @@ import '../../../data/models/home_row.dart';
 import '../../../data/repositories/multi_server_repository.dart';
 import '../../../data/services/home_row_cache_store.dart';
 import '../../../data/services/row_data_source.dart';
+import '../../../data/services/topshelf_service.dart';
 import '../../../data/viewmodels/media_bar_view_model.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../l10n/current_app_localizations.dart';
@@ -33,6 +34,8 @@ class HomeViewModel extends ChangeNotifier {
   final HomeRowCacheStore _cacheStore = HomeRowCacheStore();
   final Set<String> _inFlightPagingRowIds = {};
   final Map<String, int> _rowOffsets = {};
+
+  final TopShelfService _topShelf = TopShelfService();
 
   List<HomeRow> _rows = [];
   List<HomeRow> get rows => _rows;
@@ -309,6 +312,7 @@ class HomeViewModel extends ChangeNotifier {
       await Future.wait(completers);
 
       unawaited(_cacheStore.write(_homeCacheKey(), _rows));
+      _topShelf.update(_rows);
 
       if (showMergedResume) {
         _loadResumeAndNextUpInBackground();

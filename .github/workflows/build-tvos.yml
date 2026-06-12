@@ -126,6 +126,8 @@ jobs:
           test -d "$APP"
           test -f "$APP/flutter_assets/fonts/MaterialIcons-Regular.otf" \
             || { echo "::error::Built app is missing flutter_assets fonts"; exit 1; }
+          test -e "$APP/PlugIns/MoonfinTopShelf.appex/MoonfinTopShelf" \
+            || { echo "::error::Top Shelf extension missing from PlugIns"; exit 1; }
           rm -rf "$RUNNER_TEMP/Payload" "$RUNNER_TEMP/moonfin.ipa"
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -R "$APP" "$RUNNER_TEMP/Payload/"
@@ -159,6 +161,9 @@ jobs:
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
             archive
+          APPEX="$RUNNER_TEMP/Runner.xcarchive/Products/Applications/Runner.app/PlugIns/MoonfinTopShelf.appex/MoonfinTopShelf"
+          test -e "$APPEX" \
+            || { echo "::error::Top Shelf extension missing from archive"; exit 1; }
 
       - name: Export and upload to TestFlight
         if: ${{ inputs.distribution == 'testflight' }}

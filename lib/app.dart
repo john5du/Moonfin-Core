@@ -14,6 +14,7 @@ import 'data/services/app_update_service.dart';
 import 'data/services/cast/cast_service.dart';
 import 'data/services/download_service.dart';
 import 'data/services/plugin_sync_service.dart';
+import 'data/services/topshelf_service.dart';
 import 'di/providers.dart';
 import 'l10n/app_localizations.dart';
 import 'preference/user_preferences.dart';
@@ -59,6 +60,9 @@ class _MoonfinAppState extends State<MoonfinApp> {
     _lastResolvedLocale = _resolveLocale();
     _prefs.addListener(_syncThemeFromPrefs);
     _prefs.addListener(_syncLocaleFromPrefs);
+    if (PlatformDetection.isAppleTV) {
+      TopShelfService().startDeepLinkListener(appRouter.go);
+    }
   }
 
   void _syncThemeFromPrefs() {
