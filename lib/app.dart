@@ -150,38 +150,35 @@ class _MoonfinAppState extends State<MoonfinApp> {
                 final overlay = Overlay(
                   initialEntries: [
                     OverlayEntry(
-                      builder: (context) => InputModeTracker(
-                        child: _GlobalShortcutScope(
-                          child: Material(
-                            type: MaterialType.transparency,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Column(
-                                  children: [
-                                    const OfflineBanner(),
-                                    Expanded(
-                                      child: _ConnectivityListener(
-                                        child: child ?? const SizedBox.shrink(),
-                                      ),
-                                    ),
-                                    if (!hidePlayer)
-                                      const RepaintBoundary(
-                                        child: MiniAudioPlayer(),
-                                      ),
-                                    if (!hidePlayer)
-                                      const RepaintBoundary(
-                                        child: CastMiniPlayer(),
-                                      ),
-                                  ],
-                                ),
-                                if (PlatformDetection.isTV)
-                                  const ScreensaverHost(),
-                              ],
+                      builder: (context) {
+                        final Widget shell = Column(
+                          children: [
+                            const OfflineBanner(),
+                            Expanded(
+                              child: _ConnectivityListener(
+                                child: child ?? const SizedBox.shrink(),
+                              ),
+                            ),
+                            if (!hidePlayer)
+                              const RepaintBoundary(child: MiniAudioPlayer()),
+                            if (!hidePlayer)
+                              const RepaintBoundary(child: CastMiniPlayer()),
+                          ],
+                        );
+                        return InputModeTracker(
+                          child: _GlobalShortcutScope(
+                            child: Material(
+                              type: MaterialType.transparency,
+                              child: PlatformDetection.isTV
+                                  ? Stack(
+                                      fit: StackFit.expand,
+                                      children: [shell, const ScreensaverHost()],
+                                    )
+                                  : shell,
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                   ],
                 );
