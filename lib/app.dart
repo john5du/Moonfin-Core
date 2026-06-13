@@ -383,6 +383,9 @@ class _GlobalShortcutScopeState extends State<_GlobalShortcutScope>
   }
 
   void _onPointerDown(PointerDownEvent event) {
+    if (PlatformDetection.isTV) {
+      _screensaverController.notifyInteraction();
+    }
     if (!_trackMouseThumbHistory) {
       return;
     }
@@ -408,6 +411,9 @@ class _GlobalShortcutScopeState extends State<_GlobalShortcutScope>
 
   @override
   Future<bool> didPopRoute() async {
+    if (PlatformDetection.isTV && _screensaverController.dismissIfVisible()) {
+      return true;
+    }
     if (DialogBackSuppressor.consume()) return true;
     if (OverlaySheetController.closeTopSheet()) return true;
     if (_isPlayerRoute()) return false;
@@ -444,6 +450,10 @@ class _GlobalShortcutScopeState extends State<_GlobalShortcutScope>
   }
 
   bool _onHardwareKeyEvent(KeyEvent event) {
+    if (PlatformDetection.isTV &&
+        _screensaverController.handleKeyEvent(event)) {
+      return true;
+    }
     if (event is! KeyDownEvent) {
       return false;
     }
