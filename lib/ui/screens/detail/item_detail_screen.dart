@@ -81,6 +81,16 @@ double _desktopUiScale({UserPreferences? prefs}) {
   return effectivePrefs.get(UserPreferences.desktopUiScale).scaleFactor;
 }
 
+/// Smoothly scrolls a position back to the top. Ignore if already there.
+void _animateScrollToTop(ScrollPosition position) {
+  if (position.pixels <= position.minScrollExtent) return;
+  unawaited(position.animateTo(
+    position.minScrollExtent,
+    duration: const Duration(milliseconds: 220),
+    curve: Curves.easeOut,
+  ));
+}
+
 Future<bool> _showDeleteConfirmationDialog(
   BuildContext context, {
   required String title,
@@ -219,6 +229,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen>
         _lastFocusedBackdropItemId = null;
         _backgroundService.setBackground(item, context: BlurContext.details);
         _backdropUrl = _backgroundService.currentUrl;
+
+        if (item.mediaSources.isNotEmpty) {
+          _selectedMediaSourceId = item.mediaSources.first['Id']?.toString();
+        } else {
+          _selectedMediaSourceId = null;
+        }
+
+        _viewModel.selectedAudioIndex = null;
+        _viewModel.selectedSubtitleIndex = null;
       }
       if (!_themeMusicStarted) {
         _themeMusicStarted = true;
@@ -518,16 +537,7 @@ class _DetailContentState extends State<_DetailContent> {
   }
 
   bool _tryFocusNavbar() {
-    if (_scrollController.hasClients) {
-      final position = _scrollController.position;
-      if (position.pixels > position.minScrollExtent) {
-        position.animateTo(
-          position.minScrollExtent,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        );
-      }
-    }
+    _scrollMainToTop();
 
     final focusNavbar = NavigationLayout.focusNavbarNotifier.value;
     if (focusNavbar != null) {
@@ -599,11 +609,26 @@ class _DetailContentState extends State<_DetailContent> {
     return controller.position.context.storageContext;
   }
 
+  void _scrollMainToTop() {
+    if (_scrollController.hasClients) {
+      _animateScrollToTop(_scrollController.position);
+    }
+  }
+
+  bool _isActionButtonTarget(FocusNode target) =>
+      target == widget.initialFocusNode ||
+      target.debugLabel == 'detailActionButtons' ||
+      target.debugLabel == 'detailBoxSetActionButtons';
+
   void _focusSectionTarget(FocusNode target, {double alignment = 0.2}) {
     target.requestFocus();
-    final context = target.context;
-    if (context != null && !_shouldSkipSectionEnsureVisible(target)) {
-      unawaited(_ensureSectionVisible(context, alignment: alignment));
+    if (_isActionButtonTarget(target)) {
+      _scrollMainToTop();
+    } else {
+      final context = target.context;
+      if (context != null && !_shouldSkipSectionEnsureVisible(target)) {
+        unawaited(_ensureSectionVisible(context, alignment: alignment));
+      }
     }
   }
 
@@ -615,18 +640,8 @@ class _DetailContentState extends State<_DetailContent> {
       return;
     }
 
-    final isActionButtons = target == widget.initialFocusNode ||
-        target.debugLabel == 'detailActionButtons' ||
-        target.debugLabel == 'detailBoxSetActionButtons';
-
-    if (isActionButtons) {
-      if (_scrollController.hasClients) {
-        unawaited(_scrollController.animateTo(
-          _scrollController.position.minScrollExtent,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        ));
-      }
+    if (_isActionButtonTarget(target)) {
+      _scrollMainToTop();
     } else {
       final sectionContext = _sectionContainerContext(target);
       if (sectionContext != null && !_shouldSkipSectionEnsureVisible(target)) {
@@ -711,13 +726,7 @@ class _DetailContentState extends State<_DetailContent> {
         _resetSectionHorizontalOffset(sourceFocusNode);
         if (upTarget != null) {
           if (upTarget == favoriteFocusNode) {
-            if (_scrollController.hasClients) {
-              _scrollController.animateTo(
-                _scrollController.position.minScrollExtent,
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
-              );
-            }
+            _scrollMainToTop();
           }
           _requestSectionFocus(upTarget);
           return KeyEventResult.handled;
@@ -921,16 +930,7 @@ class _DetailContentState extends State<_DetailContent> {
             event.logicalKey == LogicalKeyboardKey.arrowUp) {
           final navbarPos = prefs.get(UserPreferences.navbarPosition);
           if (navbarPos == NavbarPosition.top) {
-            if (_scrollController.hasClients) {
-              final position = _scrollController.position;
-              if (position.pixels > position.minScrollExtent) {
-                position.animateTo(
-                  position.minScrollExtent,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOut,
-                );
-              }
-            }
+            _scrollMainToTop();
             NavigationLayout.focusNavbarNotifier.value?.call();
             return KeyEventResult.handled;
           }
@@ -1012,6 +1012,16 @@ class _DetailContentState extends State<_DetailContent> {
                       prefs: widget.prefs,
                       selectedMediaSource: selectedMediaSource,
                       overviewFocusNode: headerOverviewFocusNode,
+                      onArrowUp: _tryFocusNavbar,
+                      onArrowDown: () {
+                        final type = item.type;
+                        final targetNode = switch (type) {
+                          'BoxSet' => _sectionFocusNode('detailBoxSetActionButtons'),
+                          _ => widget.initialFocusNode ?? _sectionFocusNode('detailActionButtons'),
+                        };
+                        _requestSectionFocus(targetNode);
+                      },
+                      onArrowLeft: () => _tryFocusSidebar(),
                     ),
                   ),
                 SliverPadding(
@@ -1185,6 +1195,10 @@ class _DetailContentState extends State<_DetailContent> {
     final overviewFocusNode = hasOverview
         ? _sectionFocusNode('detailBookOverview')
         : null;
+    final actionButtonsFocusNode = widget.initialFocusNode ?? _sectionFocusNode('detailActionButtons');
+    final similarFocusNode = viewModel.similar.isNotEmpty
+        ? _sectionFocusNode('detailBookSimilar')
+        : null;
     final coverTag = item.primaryImageTag;
     final coverUrl = coverTag == null
         ? null
@@ -1285,7 +1299,7 @@ class _DetailContentState extends State<_DetailContent> {
         itemId: viewModel.item?.id,
         selectedMediaSourceId: selectedMediaSourceId,
         onSelectedMediaSourceChanged: onSelectedMediaSourceChanged,
-        tvPlayFocusNode: _sectionFocusNode('detailActionButtons'),
+        tvPlayFocusNode: actionButtonsFocusNode,
         downTarget: overviewFocusNode,
         onRequestFocus: _requestSectionFocus,
         autoPlay: widget.autoPlay,
@@ -1297,6 +1311,11 @@ class _DetailContentState extends State<_DetailContent> {
         _OverviewText(
           text: overview,
           focusNode: overviewFocusNode,
+          onArrowUp: () => _requestSectionFocus(actionButtonsFocusNode),
+          onArrowDown: similarFocusNode != null
+              ? () => _requestSectionFocus(similarFocusNode)
+              : null,
+          onArrowLeft: () => _tryFocusSidebar(),
           style: const TextStyle(
             color: Color(0xFFD7E8F6),
             fontSize: 14,
@@ -1361,6 +1380,7 @@ class _DetailContentState extends State<_DetailContent> {
             items: viewModel.similar,
             imageApi: viewModel.imageApi,
             prefs: prefs,
+            firstItemFocusNode: similarFocusNode,
             onItemLongPress: _showItemContextMenu,
             scrollController: ctrl,
           ),
@@ -2351,7 +2371,15 @@ class _DetailContentState extends State<_DetailContent> {
       ),
       if (hasOverview) ...[
         const SizedBox(height: 24),
-        _OverviewText(text: item.overview!, focusNode: overviewFocusNode),
+        _OverviewText(
+          text: item.overview!,
+          focusNode: overviewFocusNode,
+          onArrowUp: () => _requestSectionFocus(widget.initialFocusNode),
+          onArrowDown: (albumsFocusNode ?? similarFocusNode) != null
+              ? () => _requestSectionFocus(albumsFocusNode ?? similarFocusNode)
+              : null,
+          onArrowLeft: () => _tryFocusSidebar(),
+        ),
       ],
       if (viewModel.albums.isNotEmpty) ...[
         const SizedBox(height: 32),
@@ -2925,12 +2953,18 @@ class _HeaderSection extends StatelessWidget {
   final UserPreferences prefs;
   final Map<String, dynamic>? selectedMediaSource;
   final FocusNode? overviewFocusNode;
+  final VoidCallback? onArrowUp;
+  final VoidCallback? onArrowDown;
+  final VoidCallback? onArrowLeft;
 
   const _HeaderSection({
     required this.viewModel,
     required this.prefs,
     this.selectedMediaSource,
     this.overviewFocusNode,
+    this.onArrowUp,
+    this.onArrowDown,
+    this.onArrowLeft,
   });
 
   @override
@@ -3069,6 +3103,9 @@ class _HeaderSection extends StatelessWidget {
           _OverviewText(
             text: item.overview!,
             focusNode: overviewFocusNode,
+            onArrowUp: onArrowUp,
+            onArrowDown: onArrowDown,
+            onArrowLeft: onArrowLeft,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: ThemeRegistry.active.id == ThemeRegistry.neonPulseId
                   ? AppColorScheme.onSurface
@@ -5983,6 +6020,8 @@ class _ActionButtonsState extends State<_ActionButtons> {
               startPosition: startPosition,
               audioStreamIndex: audioStreamIndex,
               subtitleStreamIndex: subtitleStreamIndex,
+              audioSelectionExplicit: viewModel.selectedAudioIndex != null,
+              subtitleSelectionExplicit: viewModel.selectedSubtitleIndex != null,
               enableDirectPlay: directAllowed,
               enableDirectStream: directAllowed,
             );
@@ -6015,6 +6054,8 @@ class _ActionButtonsState extends State<_ActionButtons> {
               startPosition: startPosition,
               audioStreamIndex: audioStreamIndex,
               subtitleStreamIndex: subtitleStreamIndex,
+              audioSelectionExplicit: viewModel.selectedAudioIndex != null,
+              subtitleSelectionExplicit: viewModel.selectedSubtitleIndex != null,
               enableDirectPlay: directAllowed,
               enableDirectStream: directAllowed,
             );
@@ -6070,6 +6111,8 @@ class _ActionButtonsState extends State<_ActionButtons> {
                 startPosition: startPosition,
                 audioStreamIndex: audioStreamIndex,
                 subtitleStreamIndex: subtitleStreamIndex,
+                audioSelectionExplicit: viewModel.selectedAudioIndex != null,
+                subtitleSelectionExplicit: viewModel.selectedSubtitleIndex != null,
                 mediaSourceId: widget.selectedMediaSourceId,
                 enableDirectPlay: directAllowed,
                 enableDirectStream: directAllowed,
@@ -6132,6 +6175,8 @@ class _ActionButtonsState extends State<_ActionButtons> {
               startPosition: startPosition,
               audioStreamIndex: audioStreamIndex,
               subtitleStreamIndex: subtitleStreamIndex,
+              audioSelectionExplicit: viewModel.selectedAudioIndex != null,
+              subtitleSelectionExplicit: viewModel.selectedSubtitleIndex != null,
               enableDirectPlay: directAllowed,
               enableDirectStream: directAllowed,
             );
@@ -6176,6 +6221,10 @@ class _ActionButtonsState extends State<_ActionButtons> {
               subtitleStreamIndex: applyMainItemStreamOverrides
                   ? subtitleStreamIndex
                   : null,
+              audioSelectionExplicit: applyMainItemStreamOverrides &&
+                  viewModel.selectedAudioIndex != null,
+              subtitleSelectionExplicit: applyMainItemStreamOverrides &&
+                  viewModel.selectedSubtitleIndex != null,
               mediaSourceId: applyMainItemStreamOverrides
                   ? selectedMediaSourceId
                   : null,
@@ -6188,6 +6237,8 @@ class _ActionButtonsState extends State<_ActionButtons> {
                 audioStreamIndex: audioStreamIndex,
                 subtitleStreamIndex: subtitleStreamIndex,
                 mediaSourceId: selectedMediaSourceId,
+                audioSelectionExplicit: viewModel.selectedAudioIndex != null,
+                subtitleSelectionExplicit: viewModel.selectedSubtitleIndex != null,
               );
             }
             await playItemsFuture;
@@ -6891,7 +6942,7 @@ class _ActionButtonsState extends State<_ActionButtons> {
       selectedIndex: currentIdx >= 0 ? currentIdx : 0,
     );
     if (result != null && result < sources.length) {
-      final id = sources[result]['Id'] as String?;
+      final id = sources[result]['Id']?.toString();
       widget.onSelectedMediaSourceChanged(id);
     }
   }
@@ -6908,7 +6959,7 @@ Map<String, dynamic>? _selectedMediaSourceForItem(
     return item.mediaSources.first;
   }
   for (final source in item.mediaSources) {
-    final id = source['Id'] as String?;
+    final id = source['Id']?.toString();
     if (id == selectedMediaSourceId) {
       return source;
     }
@@ -8720,18 +8771,10 @@ class _MetadataGroup {
 class _MetadataChip extends StatefulWidget {
   final _MetadataItem item;
   final FocusNode? focusNode;
-  final VoidCallback? onArrowLeft;
-  final VoidCallback? onArrowRight;
-  final VoidCallback? onArrowUp;
-  final VoidCallback? onArrowDown;
 
   const _MetadataChip({
     required this.item,
     this.focusNode,
-    this.onArrowLeft,
-    this.onArrowRight,
-    this.onArrowUp,
-    this.onArrowDown,
   });
 
   @override
@@ -8766,30 +8809,6 @@ class _MetadataChipState extends State<_MetadataChip> with FocusStateMixin {
             widget.item.onTap?.call();
             return KeyEventResult.handled;
           }
-          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-            if (widget.onArrowLeft != null) {
-              widget.onArrowLeft!();
-              return KeyEventResult.handled;
-            }
-          }
-          if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-            if (widget.onArrowRight != null) {
-              widget.onArrowRight!();
-              return KeyEventResult.handled;
-            }
-          }
-          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            if (widget.onArrowUp != null) {
-              widget.onArrowUp!();
-              return KeyEventResult.handled;
-            }
-          }
-          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-            if (widget.onArrowDown != null) {
-              widget.onArrowDown!();
-              return KeyEventResult.handled;
-            }
-          }
           return KeyEventResult.ignored;
         },
         child: GestureDetector(
@@ -8800,13 +8819,16 @@ class _MetadataChipState extends State<_MetadataChip> with FocusStateMixin {
               color: showFocusBorder
                   ? focusColor.withValues(alpha: 0.15)
                   : Colors.white.withValues(alpha: 0.04),
+              // Border width and font weight are kept constant across focus so
+              // the chip's footprint never changes; only color/fill react to
+              // focus, which avoids the wrap reflowing as focus moves.
               border: Border.all(
                 color: showFocusBorder
                     ? focusColor
                     : (isNeon
                         ? AppColorScheme.accent.withValues(alpha: 0.3)
                         : Colors.white.withValues(alpha: 0.1)),
-                width: showFocusBorder ? 1.5 : 1.0,
+                width: 1.5,
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -8816,11 +8838,139 @@ class _MetadataChipState extends State<_MetadataChip> with FocusStateMixin {
                 color: showFocusBorder
                     ? (isNeon ? AppColorScheme.onSurface : Colors.white)
                     : Colors.white.withValues(alpha: 0.85),
-                fontWeight: showFocusBorder ? FontWeight.bold : FontWeight.normal,
                 fontSize: 12,
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A focusable category cell (Director / Writers / Studio) for the two-level
+/// D-pad model. The whole cell is the parent focus stop; Select drills into its
+/// name chips, which traverse trapped inside [trapScope] until Back.
+class _MetadataGroupCell extends StatefulWidget {
+  final String title;
+  final List<_MetadataItem> items;
+  final List<FocusNode> childNodes;
+  final FocusScopeNode trapScope;
+  final FocusNode focusNode;
+  final bool isNeon;
+  final bool isEntered;
+  final VoidCallback onEnter;
+  final VoidCallback? onLeft;
+  final VoidCallback? onRight;
+  final VoidCallback onUp;
+  final VoidCallback onDown;
+
+  const _MetadataGroupCell({
+    required this.title,
+    required this.items,
+    required this.childNodes,
+    required this.trapScope,
+    required this.focusNode,
+    required this.isNeon,
+    required this.isEntered,
+    required this.onEnter,
+    required this.onUp,
+    required this.onDown,
+    this.onLeft,
+    this.onRight,
+  });
+
+  @override
+  State<_MetadataGroupCell> createState() => _MetadataGroupCellState();
+}
+
+class _MetadataGroupCellState extends State<_MetadataGroupCell>
+    with FocusStateMixin {
+  @override
+  Widget build(BuildContext context) {
+    // The cell border shows only while the cell itself holds focus at the
+    // parent level. Once entered, focus (and the border) moves to a name chip.
+    final showCellBorder = focused && !widget.isEntered;
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (f) => setFocused(f),
+      onKeyEvent: (node, event) {
+        if (widget.isEntered) return KeyEventResult.ignored;
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
+        if (isActivateKey(event)) {
+          widget.onEnter();
+          return KeyEventResult.handled;
+        }
+        // onLeft/onRight are null at the row edges, so returning handled there
+        // caps focus inside the category row.
+        if (event.logicalKey.isLeftKey) {
+          widget.onLeft?.call();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey.isRightKey) {
+          widget.onRight?.call();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey.isUpKey) {
+          widget.onUp();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey.isDownKey) {
+          widget.onDown();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: showCellBorder
+              ? focusColor.withValues(alpha: 0.10)
+              : Colors.transparent,
+          border: Border.all(
+            color: showCellBorder ? focusColor : Colors.transparent,
+            width: 1.5,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Text(
+              widget.title,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: widget.isNeon
+                        ? AppColorScheme.accent
+                        : Colors.white.withValues(alpha: 0.4),
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.0,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Focus(
+              canRequestFocus: false,
+              descendantsAreFocusable: widget.isEntered,
+              child: FocusScope(
+                node: widget.trapScope,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    for (var c = 0; c < widget.items.length; c++)
+                      _MetadataChip(
+                        item: widget.items[c],
+                        focusNode: widget.childNodes[c],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -8847,13 +8997,25 @@ class _MetadataSection extends StatefulWidget {
 }
 
 class _MetadataSectionState extends State<_MetadataSection> {
-  final List<FocusNode> _focusNodes = [];
+  final List<FocusNode> _groupFocusNodes = [];
+  final List<List<FocusNode>> _childFocusNodes = [];
+  // Per-category scope that traps directional traversal while entered.
+  final List<FocusScopeNode> _groupTrapScopes = [];
+  // null = parent (category) level; a value = that category is entered.
+  int? _enteredGroupIndex;
   List<_MetadataGroup> _groups = [];
+  bool _builtGroups = false;
 
   @override
-  void initState() {
-    super.initState();
-    _buildGroupsAndFocusNodes();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Built here rather than in initState because group titles come from
+    // AppLocalizations.of(context), which registers an inherited dependency
+    // that initState is not allowed to access.
+    if (!_builtGroups) {
+      _builtGroups = true;
+      _buildGroupsAndFocusNodes();
+    }
   }
 
   @override
@@ -8865,12 +9027,12 @@ class _MetadataSectionState extends State<_MetadataSection> {
   }
 
   void _buildGroupsAndFocusNodes() {
-    for (final node in _focusNodes) {
-      if (node != widget.firstItemFocusNode) {
-        node.dispose();
-      }
-    }
-    _focusNodes.clear();
+    _disposeFocusNodes();
+    _groupFocusNodes.clear();
+    _childFocusNodes.clear();
+    _groupTrapScopes.clear();
+    _enteredGroupIndex = null;
+    InlineBackInterceptor.remove(_handleInterceptedBack);
 
     final item = widget.viewModel.item!;
     final l10n = AppLocalizations.of(context);
@@ -8936,28 +9098,86 @@ class _MetadataSectionState extends State<_MetadataSection> {
 
     _groups = newGroups;
 
-    int index = 0;
-    for (final group in _groups) {
-      for (final _ in group.items) {
-        FocusNode node;
-        if (index == 0 && widget.firstItemFocusNode != null) {
-          node = widget.firstItemFocusNode!;
-        } else {
-          node = FocusNode(debugLabel: 'metadata_chip_$index');
-        }
-        _focusNodes.add(node);
-        index++;
+    for (var g = 0; g < _groups.length; g++) {
+      // The first parent chip adopts the parent-owned firstItemFocusNode so the
+      // screen's existing section-entry target lands on the first category.
+      final parentNode = (g == 0 && widget.firstItemFocusNode != null)
+          ? widget.firstItemFocusNode!
+          : FocusNode(debugLabel: 'metadata_parent_$g');
+      _groupFocusNodes.add(parentNode);
+      _childFocusNodes.add([
+        for (var c = 0; c < _groups[g].items.length; c++)
+          FocusNode(debugLabel: 'metadata_child_${g}_$c'),
+      ]);
+      _groupTrapScopes.add(
+        FocusScopeNode(
+          debugLabel: 'metadata_trap_$g',
+          traversalEdgeBehavior: TraversalEdgeBehavior.stop,
+        ),
+      );
+    }
+  }
+
+  void _enterGroup(int g) {
+    if (g < 0 || g >= _groups.length) return;
+    final children = _childFocusNodes[g];
+    if (children.isEmpty) return;
+    // Single-item categories drill straight through to the lone item.
+    if (_groups[g].items.length == 1) {
+      _groups[g].items.first.onTap?.call();
+      return;
+    }
+    setState(() => _enteredGroupIndex = g);
+    InlineBackInterceptor.push(_handleInterceptedBack);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _enteredGroupIndex != g) return;
+      children.first.requestFocus();
+    });
+  }
+
+  void _handleInterceptedBack() {
+    final g = _enteredGroupIndex;
+    if (g != null) _exitGroup(g);
+  }
+
+  void _exitGroup(int g) {
+    if (g < 0 || g >= _groupFocusNodes.length) return;
+    InlineBackInterceptor.remove(_handleInterceptedBack);
+    setState(() => _enteredGroupIndex = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || g >= _groupFocusNodes.length) return;
+      _groupFocusNodes[g].requestFocus();
+    });
+  }
+
+  void _focusTarget(FocusNode? target) {
+    if (widget.onRequestFocus != null) {
+      widget.onRequestFocus!(target);
+    } else {
+      target?.requestFocus();
+    }
+  }
+
+  void _disposeFocusNodes() {
+    for (final node in _groupFocusNodes) {
+      if (node != widget.firstItemFocusNode) {
+        node.dispose();
       }
+    }
+    for (final group in _childFocusNodes) {
+      for (final node in group) {
+        node.dispose();
+      }
+    }
+    for (final scope in _groupTrapScopes) {
+      scope.dispose();
     }
   }
 
   @override
   void dispose() {
-    for (final node in _focusNodes) {
-      if (node != widget.firstItemFocusNode) {
-        node.dispose();
-      }
-    }
+    InlineBackInterceptor.remove(_handleInterceptedBack);
+    _disposeFocusNodes();
     super.dispose();
   }
 
@@ -8967,16 +9187,6 @@ class _MetadataSectionState extends State<_MetadataSection> {
 
     final isMobile = _isCompact(context);
     final isNeon = ThemeRegistry.active.id == ThemeRegistry.neonPulseId;
-
-    // Calculate first FocusNode of each group
-    final List<FocusNode> firstNodesOfGroups = [];
-    int runningIndex = 0;
-    for (final group in _groups) {
-      if (group.items.isNotEmpty && runningIndex < _focusNodes.length) {
-        firstNodesOfGroups.add(_focusNodes[runningIndex]);
-        runningIndex += group.items.length;
-      }
-    }
 
     return Container(
         decoration: BoxDecoration(
@@ -9016,14 +9226,12 @@ class _MetadataSectionState extends State<_MetadataSection> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: group.items.map((item) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 6),
-                                child: _MetadataChip(item: item),
-                              );
-                            }).toList(),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: group.items
+                                .map((item) => _MetadataChip(item: item))
+                                .toList(),
                           ),
                         ],
                       ),
@@ -9048,84 +9256,25 @@ class _MetadataSectionState extends State<_MetadataSection> {
                                   : Colors.white.withValues(alpha: 0.08),
                             ),
                           Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    group.title,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                          color: isNeon
-                                              ? AppColorScheme.accent
-                                              : Colors.white.withValues(alpha: 0.4),
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 1.0,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: group.items.asMap().entries.map((itemEntry) {
-                                      final itemIndexInGroup = itemEntry.key;
-                                      final item = itemEntry.value;
-
-                                      int chipIndex = 0;
-                                      for (int i = 0; i < groupIndex; i++) {
-                                        chipIndex += _groups[i].items.length;
-                                      }
-                                      chipIndex += itemIndexInGroup;
-                                      if (chipIndex >= _focusNodes.length) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(bottom: 8),
-                                          child: _MetadataChip(item: item),
-                                        );
-                                      }
-                                      final node = _focusNodes[chipIndex];
-                                      final totalGroups = _groups.length;
-
-                                      return Padding(
-                                        padding: const EdgeInsets.only(bottom: 8),
-                                        child: _MetadataChip(
-                                          item: item,
-                                          focusNode: node,
-                                          onArrowLeft: groupIndex == 0
-                                              ? () {} // cap left
-                                              : () => firstNodesOfGroups[groupIndex - 1].requestFocus(),
-                                          onArrowRight: groupIndex == totalGroups - 1
-                                              ? () {} // cap right
-                                              : () => firstNodesOfGroups[groupIndex + 1].requestFocus(),
-                                          onArrowUp: itemIndexInGroup == 0
-                                              ? () {
-                                                  if (widget.onRequestFocus != null) {
-                                                    widget.onRequestFocus!(widget.upTarget);
-                                                  } else {
-                                                    widget.upTarget?.requestFocus();
-                                                  }
-                                                }
-                                              : () => _focusNodes[chipIndex - 1].requestFocus(),
-                                          onArrowDown: itemIndexInGroup == group.items.length - 1
-                                              ? () {
-                                                  if (widget.onRequestFocus != null) {
-                                                    widget.onRequestFocus!(widget.downTarget);
-                                                  } else {
-                                                    widget.downTarget?.requestFocus();
-                                                  }
-                                                }
-                                              : () => _focusNodes[chipIndex + 1].requestFocus(),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ],
-                              ),
+                            child: _MetadataGroupCell(
+                              title: group.title,
+                              items: group.items,
+                              childNodes: _childFocusNodes[groupIndex],
+                              trapScope: _groupTrapScopes[groupIndex],
+                              focusNode: _groupFocusNodes[groupIndex],
+                              isNeon: isNeon,
+                              isEntered: _enteredGroupIndex == groupIndex,
+                              onEnter: () => _enterGroup(groupIndex),
+                              onLeft: groupIndex == 0
+                                  ? null
+                                  : () => _groupFocusNodes[groupIndex - 1]
+                                      .requestFocus(),
+                              onRight: groupIndex == _groups.length - 1
+                                  ? null
+                                  : () => _groupFocusNodes[groupIndex + 1]
+                                      .requestFocus(),
+                              onUp: () => _focusTarget(widget.upTarget),
+                              onDown: () => _focusTarget(widget.downTarget),
                             ),
                           ),
                         ],
@@ -9143,12 +9292,20 @@ class _OverviewText extends StatelessWidget {
   final TextStyle? style;
   final TextAlign? textAlign;
   final FocusNode? focusNode;
+  final FocusNode? upTarget;
+  final VoidCallback? onArrowUp;
+  final VoidCallback? onArrowDown;
+  final VoidCallback? onArrowLeft;
 
   const _OverviewText({
     required this.text,
     this.style,
     this.textAlign,
     this.focusNode,
+    this.upTarget,
+    this.onArrowUp,
+    this.onArrowDown,
+    this.onArrowLeft,
   });
 
   @override
@@ -9157,6 +9314,10 @@ class _OverviewText extends StatelessWidget {
     return _ExpandableBiography(
       text: text,
       toggleFocusNode: focusNode,
+      upTarget: upTarget,
+      onArrowUp: onArrowUp,
+      onArrowDown: onArrowDown,
+      onArrowLeft: onArrowLeft,
       style:
           style ??
           Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -10237,6 +10398,10 @@ class _ExpandableBiographyState extends State<_ExpandableBiography> {
 
     final focusNavbar = NavigationLayout.focusNavbarNotifier.value;
     if (focusNavbar != null) {
+      final scrollable = Scrollable.maybeOf(context);
+      if (scrollable != null) {
+        _animateScrollToTop(scrollable.position);
+      }
       focusNavbar();
       return true;
     }
