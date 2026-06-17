@@ -1157,7 +1157,7 @@ class _DetailContentState extends State<_DetailContent> {
       final type = (person['Type'] as String?)?.toLowerCase();
       if (type != 'author' && type != 'writer') continue;
 
-      final id = (person['Id'] as String?)?.trim();
+      final id = person['Id']?.toString().trim();
       if (id != null && id.isNotEmpty) {
         return id;
       }
@@ -3868,7 +3868,7 @@ class _BookAuthorDetailScreenState extends State<_BookAuthorDetailScreen> {
           orElse: () =>
               items.isNotEmpty ? items.first : const <String, dynamic>{},
         );
-        final personId = (person['Id'] as String?)?.trim();
+        final personId = person['Id']?.toString().trim();
         if (personId != null && personId.isNotEmpty) {
           final imageTag = (person['PrimaryImageTag'] as String?)?.trim();
           photoUrl = client.imageApi.getPrimaryImageUrl(
@@ -8210,7 +8210,7 @@ class _CastRow extends StatelessWidget {
           final person = people[index];
           final name = person['Name'] as String? ?? '';
           final role = person['Role'] as String?;
-          final personId = person['Id'] as String?;
+          final personId = person['Id']?.toString();
           final tag = person['PrimaryImageTag'] as String?;
 
           String? imageUrl;
@@ -9048,8 +9048,8 @@ class _MetadataSectionState extends State<_MetadataSection> {
               ? l10n.director
               : l10n.directors,
           items: widget.viewModel.directors.map((d) {
-            final name = d['Name'] as String? ?? '';
-            final id = d['Id'] as String?;
+            final name = d['Name']?.toString() ?? '';
+            final id = d['Id']?.toString();
             return _MetadataItem(
               name: name,
               id: id,
@@ -9069,8 +9069,8 @@ class _MetadataSectionState extends State<_MetadataSection> {
               ? l10n.writer
               : l10n.writers,
           items: widget.viewModel.writers.map((w) {
-            final name = w['Name'] as String? ?? '';
-            final id = w['Id'] as String?;
+            final name = w['Name']?.toString() ?? '';
+            final id = w['Id']?.toString();
             return _MetadataItem(
               name: name,
               id: id,
@@ -9088,8 +9088,8 @@ class _MetadataSectionState extends State<_MetadataSection> {
         _MetadataGroup(
           title: l10n.studio,
           items: item.studios.map((s) {
-            final name = s['Name'] as String? ?? '';
-            final id = s['Id'] as String?;
+            final name = s['Name']?.toString() ?? '';
+            final id = s['Id']?.toString();
             return _MetadataItem(
               name: name,
               id: id,
