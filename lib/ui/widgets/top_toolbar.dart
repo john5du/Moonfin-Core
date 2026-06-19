@@ -57,6 +57,10 @@ class TopToolbar extends StatefulWidget {
   final bool showBackButton;
   final FocusNode? contentFocusNode;
 
+  /// True while focus is inside the toolbar, so screens can avoid stealing its
+  /// d-pad keys. Mirrors [LeftSidebar.isFocusedNotifier].
+  static final ValueNotifier<bool> isFocusedNotifier = ValueNotifier<bool>(false);
+
   const TopToolbar({
     super.key,
     this.activeRoute,
@@ -169,6 +173,7 @@ class _TopToolbarState extends State<TopToolbar> {
           _previousFocusAvatarCallback;
     }
     _clockTimer?.cancel();
+    TopToolbar.isFocusedNotifier.value = false;
     _avatarFocus.removeListener(_onAvatarFocusChanged);
     FocusManager.instance.removeListener(_trackPreviousFocus);
     _toolbarScopeNode.dispose();
@@ -321,10 +326,14 @@ class _TopToolbarState extends State<TopToolbar> {
     final focusContent = NavigationLayout.focusContentFromNavbarNotifier.value;
     if (focusContent != null && widget.activeRoute == Destinations.home) {
       focusContent();
-      final primary = FocusManager.instance.primaryFocus;
-      if (_isUsableOutsideToolbar(primary)) {
-        return;
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final primary = FocusManager.instance.primaryFocus;
+        if (primary == null || _isInsideToolbar(primary)) {
+          _restoreFocusBelowToolbarFallback();
+        }
+      });
+      return;
     }
 
     _restoreFocusBelowToolbarFallback();
@@ -386,6 +395,30 @@ class _TopToolbarState extends State<TopToolbar> {
         if (mounted) _moveFocusDown(attempt: attempt + 1);
       });
     }
+  }
+
+  bool _moveWithinToolbar(TraversalDirection direction) {
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null || !_isInsideToolbar(primary)) return false;
+
+    final nodes = _toolbarScopeNode.descendants
+        .where((n) => !n.skipTraversal && _isLaidOutFocusNode(n))
+        .map((n) => (
+              node: n,
+              x: (n.context!.findRenderObject()! as RenderBox)
+                  .localToGlobal(Offset.zero)
+                  .dx,
+            ))
+        .toList()
+      ..sort((a, b) => a.x.compareTo(b.x));
+
+    final index = nodes.indexWhere((e) => e.node == primary);
+    if (index < 0) return false;
+    final nextIndex =
+        direction == TraversalDirection.right ? index + 1 : index - 1;
+    if (nextIndex < 0 || nextIndex >= nodes.length) return false;
+    nodes[nextIndex].node.requestFocus();
+    return true;
   }
 
   FocusNode? _findFirstFocusableBelowToolbar(FocusScopeNode scope) {
@@ -478,6 +511,9 @@ class _TopToolbarState extends State<TopToolbar> {
           padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
           child: Focus(
             focusNode: _toolbarScopeNode,
+            onFocusChange: (hasFocus) {
+              TopToolbar.isFocusedNotifier.value = hasFocus;
+            },
             onKeyEvent: (_, event) {
               if (event is KeyDownEvent &&
                   event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -492,15 +528,30 @@ class _TopToolbarState extends State<TopToolbar> {
                     }
                   }
 
-                  final success = primary.focusInDirection(TraversalDirection.down);
-                  if (success) {
-                    final newFocus = FocusManager.instance.primaryFocus;
-                    if (newFocus != null && _isInsideToolbar(newFocus)) {
-                      return KeyEventResult.handled;
+                  if (widget.activeRoute != Destinations.home) {
+                    final success =
+                        primary.focusInDirection(TraversalDirection.down);
+                    if (success) {
+                      final newFocus = FocusManager.instance.primaryFocus;
+                      if (newFocus != null && _isInsideToolbar(newFocus)) {
+                        return KeyEventResult.handled;
+                      }
                     }
                   }
                 }
                 _restoreFocusBelowToolbar();
+                return KeyEventResult.handled;
+              }
+              if (PlatformDetection.isTV &&
+                  event is KeyDownEvent &&
+                  (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                      event.logicalKey == LogicalKeyboardKey.arrowRight)) {
+                final direction =
+                    event.logicalKey == LogicalKeyboardKey.arrowLeft
+                        ? TraversalDirection.left
+                        : TraversalDirection.right;
+                _moveWithinToolbar(direction);
+                // Always consume so the key can't escape sideways into content.
                 return KeyEventResult.handled;
               }
               return KeyEventResult.ignored;
@@ -712,10 +763,8 @@ class _TopToolbarState extends State<TopToolbar> {
     int order = 1;
     var navSlot = 0;
     Color? nextNavColor() {
-      final cycle = AppColorScheme.navColorCycle;
-      if (cycle.isEmpty) return null;
-      final c = cycle[navSlot % cycle.length];
-      navSlot += 1;
+      final c = AppColorScheme.navColorForSlot(navSlot);
+      if (c != null) navSlot += 1;
       return c;
     }
 

@@ -53,6 +53,7 @@ import '../../widgets/navigation_layout.dart';
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/seasonal_effects.dart';
 import '../../widgets/settings/settings_panel.dart';
+import '../../widgets/top_toolbar.dart';
 import '../../navigation/home_refresh_bus.dart';
 import '../../widgets/bounded_network_image.dart';
 import '../../widgets/fullscreen_backdrop_switcher.dart';
@@ -1670,7 +1671,11 @@ class _ContentRowsState extends State<_ContentRows>
       if (mounted && !_mediaBarVisible) {
         setState(() => _mediaBarVisible = true);
       }
-      _requestMediaBarFocus(force: true);
+      if (_mediaBarFocusNode.context != null) {
+        _mediaBarFocusNode.requestFocus();
+      } else {
+        _requestMediaBarFocus(force: true);
+      }
       return;
     }
 
@@ -2564,6 +2569,8 @@ class _ContentRowsState extends State<_ContentRows>
     if (!_windowHasFocus) return false;
     if (SettingsPanel.isOpenNotifier.value || OverlaySheetController.hasOpenSheet) return false;
     if (LeftSidebar.isFocusedNotifier.value) return false;
+    // Let the focused top navbar handle its own d-pad keys.
+    if (TopToolbar.isFocusedNotifier.value) return false;
 
     final homeRowsHaveFocus = _rowKeys.values.any((key) {
       final state = key.currentState;
